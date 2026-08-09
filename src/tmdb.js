@@ -37,11 +37,17 @@ async function getMovieDetails(tmdbId) {
   return tmdbGet(`/movie/${tmdbId}`, { append_to_response: 'external_ids' });
 }
 
-async function getRecommendations(tmdbId, type) {
+async function getRecommendations(tmdbId, type, page = 1) {
   const kind = type === 'movie' ? 'movie' : 'tv';
-  const data = await tmdbGet(`/${kind}/${tmdbId}/recommendations`);
+  const data = await tmdbGet(`/${kind}/${tmdbId}/recommendations`, { page });
   return data.results || [];
 }
 
-module.exports = { findByImdbId, getShowDetails, getMovieDetails, getRecommendations };
+async function getSimilar(tmdbId, type) {
+  const kind = type === 'movie' ? 'movie' : 'tv';
+  const data = await tmdbGet(`/${kind}/${tmdbId}/similar`);
+  return data.results || [];
+}
+
+module.exports = { findByImdbId, getShowDetails, getMovieDetails, getRecommendations, getSimilar };
 

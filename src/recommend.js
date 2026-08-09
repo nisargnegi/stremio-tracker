@@ -32,14 +32,19 @@ async function gatherCandidates(db, userId) {
   const seeds = [...getSeeds('movie'), ...getSeeds('series')];
   const candidates = new Map();
 
-  // Fetch TMDB recommendations in parallel batches of 10
+  // Fetch TMDB recommendations (pages 1 & 2) and similar titles in parallel batches of 10
   const BATCH_SIZE = 10;
   for (let i = 0; i < seeds.length; i += BATCH_SIZE) {
     const batch = seeds.slice(i, i + BATCH_SIZE);
     await Promise.all(batch.map(async (seed) => {
       try {
-        const recs = await tmdb.getRecommendations(seed.tmdb_id, seed.type);
-        for (const r of recs.slice(0, 15)) {
+        const [recs1, recs2, similar] = await Promise.all([
+          tmdb.getRecommendations(seed.tmdb_id, seed.type, 1),
+          tmdb.getRecommendations(seed.tmdb_id, seed.type, 2),
+          tmdb.getSimilar(seed.tmdb_id, seed.type)
+        ]);
+        const pool = [...recs1, ...recs2, ...similar];
+        for (const r of pool) {
           if (!candidates.has(r.id)) {
             candidates.set(r.id, {
               tmdbId: r.id,
