@@ -200,16 +200,16 @@ Return a JSON array of the top 60 best personalized matches. Each item must have
 
 Output raw JSON array only — no markdown, no explanation.`;
 
-  const model = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+  const model = process.env.GEMINI_MODEL || 'gemini-2.0-flash-lite';
 
   try {
-    const url = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: 6000, temperature: 0.35 },
+        generationConfig: { maxOutputTokens: 6000, temperature: 0.35, responseMimeType: 'application/json' },
       }),
     });
     const data = await res.json();

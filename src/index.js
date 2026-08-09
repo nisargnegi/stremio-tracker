@@ -219,7 +219,7 @@ app.use(`/${SECRET}`, (req, res, next) => {
   // API: debug — test Gemini connectivity and env vars from the VPS
   if (url === '/api/debug' && req.method === 'GET') {
     const geminiKey = process.env.GEMINI_API_KEY;
-    const geminiModel = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+    const geminiModel = process.env.GEMINI_MODEL || 'gemini-2.0-flash-lite';
     const tmdbKey = process.env.TMDB_API_KEY;
     const info = {
       GEMINI_API_KEY: geminiKey ? `set (${geminiKey.slice(0, 6)}...)` : 'NOT SET',
@@ -229,7 +229,7 @@ app.use(`/${SECRET}`, (req, res, next) => {
     };
     if (!geminiKey) return res.json({ ...info, gemini_test: 'skipped_no_key' });
     const nodeFetch = require('node-fetch');
-    const testUrl = `https://generativelanguage.googleapis.com/v1/models/${geminiModel}:generateContent?key=${geminiKey}`;
+    const testUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${geminiKey}`;
     nodeFetch(testUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
