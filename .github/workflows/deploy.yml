@@ -20,5 +20,6 @@ jobs:
           port: 22
           script: |
             cd ~/stremio-tracker
-            git pull
-            docker compose up -d --build
+            git fetch --all
+            git reset --hard origin/main
+            docker compose up -d --build --force-recreate
