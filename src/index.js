@@ -17,6 +17,7 @@ const rateLimit = require('express-rate-limit');
 const { addonBuilder, getRouter } = require('stremio-addon-sdk');
 const { init } = require('./db');
 const { logStreamRequest } = require('./watchTracker');
+const recommend = require('./recommend');
 
 const db = init();
 
