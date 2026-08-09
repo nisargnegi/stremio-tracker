@@ -219,7 +219,7 @@ app.use(`/${SECRET}`, (req, res, next) => {
   // API: debug — test Gemini connectivity and env vars from the VPS
   if (url === '/api/debug' && req.method === 'GET') {
     const geminiKey = process.env.GEMINI_API_KEY;
-    const geminiModel = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+    const geminiModel = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
     const tmdbKey = process.env.TMDB_API_KEY;
     const info = {
       GEMINI_API_KEY: geminiKey ? `set (${geminiKey.slice(0, 6)}...)` : 'NOT SET',

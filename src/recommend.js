@@ -200,7 +200,7 @@ Return a JSON array of the top 60 best personalized matches. Each item must have
 
 Output raw JSON array only — no markdown, no explanation.`;
 
-  const model = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+  const model = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
 
   try {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
