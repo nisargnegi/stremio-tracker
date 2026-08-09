@@ -42,14 +42,14 @@ async function gatherCandidates(db, userId) {
   return [...candidates.values()];
 }
 
-// Re-rank candidates using Gemini 2.5 Flash (Google AI Studio free tier).
+// Re-rank candidates using Gemini (Google AI Studio free tier).
 async function rankWithGemini(candidates, seedTitles) {
   if (!process.env.GEMINI_API_KEY || candidates.length === 0) return null;
 
   const model = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
   const prompt = `Given someone who enjoyed: ${seedTitles.join(', ')}.
 Here are candidate titles: ${candidates.map((c) => c.title).join(', ')}.
-Return a JSON array of the top 10 best matches, each as {"title": "...", "reason": "one short sentence why it fits"}. JSON only, no prose, no markdown.`;
+Return a JSON array of the top 10 best matches, each object having exactly two keys: "title" and "reason" (one short sentence). Output raw JSON only — no markdown, no code fences, no extra text.`;
 
   try {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
@@ -58,13 +58,24 @@ Return a JSON array of the top 10 best matches, each as {"title": "...", "reason
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: 1000, temperature: 0.4 },
+        generationConfig: {
+          maxOutputTokens: 2000,   // raised from 1000 to avoid truncation
+          temperature: 0.4,
+          responseMimeType: 'application/json', // tell Gemini to return clean JSON
+        },
       }),
     });
     const data = await res.json();
     if (data.error) throw new Error(data.error.message);
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
-    const ranked = JSON.parse(text.replace(/```json|```/g, '').trim());
+    const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
+
+    // Extract the JSON array robustly — find first '[' and last ']'
+    // so any surrounding prose or markdown fences are ignored.
+    const start = raw.indexOf('[');
+    const end = raw.lastIndexOf(']');
+    if (start === -1 || end === -1) throw new Error('No JSON array found in Gemini response');
+    const ranked = JSON.parse(raw.slice(start, end + 1));
+
     return ranked.map((r, i) => ({
       ...candidates.find((c) => c.title === r.title),
       reason: r.reason,
