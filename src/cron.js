@@ -10,7 +10,7 @@ const { runTimeoutSweep } = require('./watchTracker');
 
 async function checkNewEpisodes(db) {
   const shows = db.prepare(`
-    SELECT * FROM items WHERE type = 'series' AND status = 'watching'
+    SELECT * FROM items WHERE type = 'series'
   `).all();
 
   for (const show of shows) {
@@ -43,6 +43,10 @@ async function checkNewEpisodes(db) {
       `).get(show.user_id, show.imdb_id, next.season_number, next.episode_number);
 
       if (!alreadyWatched && !alreadyNotified && isToday(next.air_date)) {
+        // Re-activate show in Continue Watching catalog right as new episode drops
+        db.prepare(`UPDATE items SET status = 'watching' WHERE imdb_id = ? AND user_id = ?`)
+          .run(show.imdb_id, show.user_id);
+
         await notify(
           `🆕 *${details.name}* S${next.season_number}E${next.episode_number} "${next.name}" just aired.`
         );

@@ -13,7 +13,7 @@
 //
 // Nothing here requires the user to press a button.
 
-const { findByImdbId } = require('./tmdb');
+const { findByImdbId, getShowDetails } = require('./tmdb');
 const TIMEOUT_HOURS = parseInt(process.env.WATCH_TIMEOUT_HOURS || '3', 10);
 
 // Fire-and-forget: fetch title/year/tmdbId from TMDB and store them.
@@ -114,12 +114,40 @@ function markPreviousMovieIfAny(db, userId, currentImdbId) {
   }
 }
 
+async function checkShowCompletion(db, userId, imdbId) {
+  try {
+    const show = db.prepare('SELECT tmdb_id, title FROM items WHERE imdb_id = ? AND user_id = ? AND type = "series"').get(imdbId, userId);
+    if (!show || !show.tmdb_id) return;
+
+    const details = await getShowDetails(show.tmdb_id);
+    const lastAired = details.last_episode_to_air;
+    if (!lastAired) return;
+
+    const hasWatchedLast = db.prepare(`
+      SELECT 1 FROM watched
+      WHERE user_id = ? AND imdb_id = ?
+        AND (season > ? OR (season = ? AND episode >= ?))
+    `).get(userId, imdbId, lastAired.season_number, lastAired.season_number, lastAired.episode_number);
+
+    if (hasWatchedLast) {
+      db.prepare(`UPDATE items SET status = 'completed' WHERE imdb_id = ? AND user_id = ?`).run(imdbId, userId);
+      console.log(`[watchTracker] Show "${show.title || imdbId}" marked COMPLETED (caught up to S${lastAired.season_number}E${lastAired.episode_number})`);
+    } else {
+      db.prepare(`UPDATE items SET status = 'watching' WHERE imdb_id = ? AND user_id = ?`).run(imdbId, userId);
+    }
+  } catch (_) {}
+}
+
 function markWatched(db, { userId = 'default', imdbId, type, season, episode, source = 'heuristic' }) {
   db.prepare(`
     INSERT INTO watched (user_id, imdb_id, type, season, episode, source)
     VALUES (?, ?, ?, ?, ?, ?)
     ON CONFLICT(user_id, imdb_id, season, episode) DO NOTHING
   `).run(userId, imdbId, type, season ?? null, episode ?? null, source);
+
+  if (type === 'series') {
+    checkShowCompletion(db, userId, imdbId);
+  }
 }
 
 // Run on a schedule (see cron.js). Catches series finales / last-watched

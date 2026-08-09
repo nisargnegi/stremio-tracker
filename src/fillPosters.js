@@ -62,6 +62,22 @@ async function run() {
         }
       }
 
+      let status = 'watching';
+      if (type === 'series' && tmdbId) {
+        try {
+          const details = await getShowDetails(tmdbId);
+          const lastAired = details.last_episode_to_air;
+          if (lastAired) {
+            const hasWatchedLast = db.prepare(`
+              SELECT 1 FROM watched
+              WHERE user_id = ? AND imdb_id = ?
+                AND (season > ? OR (season = ? AND episode >= ?))
+            `).get(userId, imdbId, lastAired.season_number, lastAired.season_number, lastAired.episode_number);
+            if (hasWatchedLast) status = 'completed';
+          }
+        } catch (_) {}
+      }
+
       if (title || poster) {
         const isAnimation = genreIds.includes(16);
         const isJapanese = originalLanguage === 'ja' || originCountry.includes('JP');
@@ -73,9 +89,10 @@ async function run() {
               year      = COALESCE(?, year),
               tmdb_id   = COALESCE(?, tmdb_id),
               poster    = COALESCE(?, poster),
-              is_anime  = ?
+              is_anime  = ?,
+              status    = ?
           WHERE imdb_id = ? AND user_id = ?
-        `).run(title, year, tmdbId, poster, isAnime, imdbId, userId);
+        `).run(title, year, tmdbId, poster, isAnime, status, imdbId, userId);
 
         successCount++;
         process.stdout.write(`\rProcessed ${i + 1}/${items.length} (${title || imdbId}) anime=${isAnime}     `);
