@@ -182,7 +182,7 @@ async function rankWithGemini(candidates, seedTitles) {
 
   // Send the top 120 by vote average to stay within token limits.
   const top = [...candidates]
-    .filter((c) => c.voteCount >= 100 || c.popularity >= 25)
+    .filter((c) => c.voteCount >= 100 && c.popularity >= 15)
     .sort((a, b) => b.popularity - a.popularity)
     .slice(0, 120);
 
@@ -193,10 +193,10 @@ The user has watched and enjoyed: ${seedTitles.join(', ')}.
 Candidates (title | type):
 ${top.map((c) => `${c.title} | ${c.type}`).join('\n')}
 
-Return a JSON array of the top 60 best personalized matches. Each item must have:
+Return a JSON array of the top 60 best personalized matches. Each item must have exactly these three fields:
 - "title": exact title from the list above
 - "type": "movie" or "series"
-- "reason": one punchy sentence (max 15 words) explaining why this fits the user's taste
+- "reason": one punchy sentence (max 15 words) explaining why this fits the user's taste (this field is MANDATORY)
 
 Output raw JSON array only — no markdown, no explanation.`;
 
@@ -241,7 +241,7 @@ async function rankWithDeepSeek(candidates, seedTitles) {
   if (!process.env.DEEPSEEK_API_KEY || candidates.length === 0) return null;
 
   const top = [...candidates]
-    .filter((c) => c.voteCount >= 100 || c.popularity >= 25)
+    .filter((c) => c.voteCount >= 100 && c.popularity >= 15)
     .sort((a, b) => b.popularity - a.popularity)
     .slice(0, 100);
 
@@ -320,7 +320,7 @@ async function run(userId = 'default') {
 
   const aiIds = new Set(aiRanked.map((c) => c.tmdbId));
   const fallback = allCandidates
-    .filter((c) => !aiIds.has(c.tmdbId) && (c.voteCount >= 100 || c.popularity >= 25))
+    .filter((c) => !aiIds.has(c.tmdbId) && (c.voteCount >= 100 && c.popularity >= 15))
     .sort((a, b) => b.popularity - a.popularity)
     .map((c, i) => ({ ...c, score: -(i + 1) }));
 
