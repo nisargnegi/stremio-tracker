@@ -173,7 +173,7 @@ app.use((req, res, next) => {
         SELECT imdb_id, type, title, poster, year, status
         FROM items
         WHERE user_id = 'default'
-        ORDER BY id DESC
+        ORDER BY imdb_id DESC
       `).all();
       return res.json(rows);
     } catch (err) {
