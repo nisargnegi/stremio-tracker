@@ -29,6 +29,7 @@ const manifest = {
     { type: 'series', id: 'tracker-continue', name: 'Continue Watching' },
     { type: 'movie', id: 'tracker-recommended', name: 'Recommended For You' },
     { type: 'series', id: 'tracker-recommended', name: 'Recommended For You' },
+    { type: 'series', id: 'tracker-recommended-anime', name: 'Recommended Anime' },
   ],
   idPrefixes: ['tt'], // IMDb ids, same space Cinemeta uses
   behaviorHints: { configurable: true },
@@ -75,13 +76,26 @@ builder.defineCatalogHandler(({ type, id }) => {
   if (id === 'tracker-recommended') {
     const rows = db.prepare(`
       SELECT imdb_id, title, poster FROM recommendations_cache
-      WHERE type = ?
+      WHERE type = ? AND (is_anime = 0 OR type = 'movie')
       ORDER BY score DESC
-      LIMIT 25
+      LIMIT 40
     `).all(type);
 
     return Promise.resolve({
       metas: rows.map((r) => ({ id: r.imdb_id, type, name: r.title || r.imdb_id, poster: r.poster || undefined })),
+    });
+  }
+
+  if (id === 'tracker-recommended-anime') {
+    const rows = db.prepare(`
+      SELECT imdb_id, title, poster FROM recommendations_cache
+      WHERE type = 'series' AND is_anime = 1
+      ORDER BY score DESC
+      LIMIT 40
+    `).all();
+
+    return Promise.resolve({
+      metas: rows.map((r) => ({ id: r.imdb_id, type: 'series', name: r.title || r.imdb_id, poster: r.poster || undefined })),
     });
   }
 

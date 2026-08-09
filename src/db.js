@@ -76,6 +76,7 @@ function init() {
       type TEXT NOT NULL,
       title TEXT,
       poster TEXT,
+      is_anime INTEGER DEFAULT 0,
       score REAL DEFAULT 0,
       reason TEXT,
       updated_at TEXT DEFAULT (datetime('now')),
