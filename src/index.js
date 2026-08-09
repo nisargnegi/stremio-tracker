@@ -111,7 +111,7 @@ builder.defineCatalogHandler(({ type, id }) => {
 // secret segment in the path means the addon 404s for everyone except
 // whoever has the exact install URL you generated.
 
-const SECRET = (process.env.APP_SECRET || '').trim();
+const SECRET = (process.env.APP_SECRET || '').trim().replace(/^["']|["']$/g, '');
 const INSECURE_DEFAULT = 'change-me-to-a-random-string';
 
 if (!SECRET || SECRET === INSECURE_DEFAULT) {
