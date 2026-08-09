@@ -43,6 +43,12 @@ async function getRecommendations(tmdbId, type, page = 1) {
   return data.results || [];
 }
 
+async function getSimilar(tmdbId, type, page = 1) {
+  const kind = type === 'movie' ? 'movie' : 'tv';
+  const data = await tmdbGet(`/${kind}/${tmdbId}/similar`, { page });
+  return data.results || [];
+}
+
 async function getTrending(type) {
   const kind = type === 'movie' ? 'movie' : 'tv';
   const data = await tmdbGet(`/trending/${kind}/week`);
