@@ -117,21 +117,40 @@ function markPreviousMovieIfAny(db, userId, currentImdbId) {
 async function checkShowCompletion(db, userId, imdbId) {
   try {
     const show = db.prepare('SELECT tmdb_id, title FROM items WHERE imdb_id = ? AND user_id = ? AND type = "series"').get(imdbId, userId);
-    if (!show || !show.tmdb_id) return;
+    if (!show) return;
 
+    // 1. Check if the show was marked watched as a whole (season IS NULL)
+    const hasShowLevel = db.prepare(`
+      SELECT 1 FROM watched WHERE user_id = ? AND imdb_id = ? AND season IS NULL
+    `).get(userId, imdbId);
+
+    if (hasShowLevel) {
+      db.prepare(`UPDATE items SET status = 'completed' WHERE imdb_id = ? AND user_id = ?`).run(imdbId, userId);
+      return;
+    }
+
+    if (!show.tmdb_id) return;
+
+    // 2. Check TMDB episode air dates / show status
     const details = await getShowDetails(show.tmdb_id);
     const lastAired = details.last_episode_to_air;
-    if (!lastAired) return;
+    
+    let isCompleted = false;
+    if (lastAired) {
+      isCompleted = !!db.prepare(`
+        SELECT 1 FROM watched
+        WHERE user_id = ? AND imdb_id = ?
+          AND (season > ? OR (season = ? AND episode >= ?))
+      `).get(userId, imdbId, lastAired.season_number, lastAired.season_number, lastAired.episode_number);
+    } else if (details.status === 'Ended' || details.status === 'Canceled') {
+      isCompleted = !!db.prepare(`
+        SELECT 1 FROM watched WHERE user_id = ? AND imdb_id = ?
+      `).get(userId, imdbId);
+    }
 
-    const hasWatchedLast = db.prepare(`
-      SELECT 1 FROM watched
-      WHERE user_id = ? AND imdb_id = ?
-        AND (season > ? OR (season = ? AND episode >= ?))
-    `).get(userId, imdbId, lastAired.season_number, lastAired.season_number, lastAired.episode_number);
-
-    if (hasWatchedLast) {
+    if (isCompleted) {
       db.prepare(`UPDATE items SET status = 'completed' WHERE imdb_id = ? AND user_id = ?`).run(imdbId, userId);
-      console.log(`[watchTracker] Show "${show.title || imdbId}" marked COMPLETED (caught up to S${lastAired.season_number}E${lastAired.episode_number})`);
+      console.log(`[watchTracker] Show "${show.title || imdbId}" marked COMPLETED`);
     } else {
       db.prepare(`UPDATE items SET status = 'watching' WHERE imdb_id = ? AND user_id = ?`).run(imdbId, userId);
     }

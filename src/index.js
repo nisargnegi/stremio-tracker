@@ -272,8 +272,8 @@ app.post(`/${SECRET}/mark-watched`, (req, res) => {
   try {
     db.prepare(`
       INSERT INTO items (imdb_id, user_id, type, status)
-      VALUES (?, 'default', ?, 'watching')
-      ON CONFLICT(imdb_id, user_id) DO NOTHING
+      VALUES (?, 'default', ?, 'completed')
+      ON CONFLICT(imdb_id, user_id) DO UPDATE SET status = 'completed'
     `).run(imdbId, type);
     db.prepare(`
       INSERT INTO watched (user_id, imdb_id, type, source)

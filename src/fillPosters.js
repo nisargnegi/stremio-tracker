@@ -63,19 +63,32 @@ async function run() {
       }
 
       let status = 'watching';
-      if (type === 'series' && tmdbId) {
-        try {
-          const details = await getShowDetails(tmdbId);
-          const lastAired = details.last_episode_to_air;
-          if (lastAired) {
-            const hasWatchedLast = db.prepare(`
-              SELECT 1 FROM watched
-              WHERE user_id = ? AND imdb_id = ?
-                AND (season > ? OR (season = ? AND episode >= ?))
-            `).get(userId, imdbId, lastAired.season_number, lastAired.season_number, lastAired.episode_number);
-            if (hasWatchedLast) status = 'completed';
-          }
-        } catch (_) {}
+      if (type === 'series') {
+        const hasShowLevel = db.prepare(`
+          SELECT 1 FROM watched WHERE user_id = ? AND imdb_id = ? AND season IS NULL
+        `).get(userId, imdbId);
+
+        if (hasShowLevel) {
+          status = 'completed';
+        } else if (tmdbId) {
+          try {
+            const details = await getShowDetails(tmdbId);
+            const lastAired = details.last_episode_to_air;
+            if (lastAired) {
+              const hasWatchedLast = db.prepare(`
+                SELECT 1 FROM watched
+                WHERE user_id = ? AND imdb_id = ?
+                  AND (season > ? OR (season = ? AND episode >= ?))
+              `).get(userId, imdbId, lastAired.season_number, lastAired.season_number, lastAired.episode_number);
+              if (hasWatchedLast) status = 'completed';
+            } else if (details.status === 'Ended' || details.status === 'Canceled') {
+              const hasAnyWatched = db.prepare(`
+                SELECT 1 FROM watched WHERE user_id = ? AND imdb_id = ?
+              `).get(userId, imdbId);
+              if (hasAnyWatched) status = 'completed';
+            }
+          } catch (_) {}
+        }
       }
 
       if (title || poster) {
