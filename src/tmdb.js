@@ -27,12 +27,14 @@ async function findByImdbId(imdbId) {
   };
 }
 
+// append_to_response=external_ids gives us the imdb_id in one call —
+// without it, TV show responses don't include imdb_id and recommendations break.
 async function getShowDetails(tmdbId) {
-  return tmdbGet(`/tv/${tmdbId}`);
+  return tmdbGet(`/tv/${tmdbId}`, { append_to_response: 'external_ids' });
 }
 
 async function getMovieDetails(tmdbId) {
-  return tmdbGet(`/movie/${tmdbId}`);
+  return tmdbGet(`/movie/${tmdbId}`, { append_to_response: 'external_ids' });
 }
 
 async function getRecommendations(tmdbId, type) {
@@ -42,3 +44,4 @@ async function getRecommendations(tmdbId, type) {
 }
 
 module.exports = { findByImdbId, getShowDetails, getMovieDetails, getRecommendations };
+
