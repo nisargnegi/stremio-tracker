@@ -79,13 +79,11 @@ async function gatherCandidates(db, userId) {
     const batch = seeds.slice(i, i + SEED_BATCH);
     await Promise.all(batch.map(async (seed) => {
       try {
-        const [recs1, recs2, sim1, sim2] = await Promise.all([
+        const [recs1, sim1] = await Promise.all([
           tmdb.getRecommendations(seed.tmdb_id, seed.type, 1),
-          tmdb.getRecommendations(seed.tmdb_id, seed.type, 2),
           tmdb.getSimilar(seed.tmdb_id, seed.type, 1),
-          tmdb.getSimilar(seed.tmdb_id, seed.type, 2),
         ]);
-        for (const r of [...recs1, ...recs2, ...sim1, ...sim2]) {
+        for (const r of [...recs1, ...sim1]) {
           addResult(r, seed.type, `Because you watched ${seed.title}`);
         }
       } catch (err) {
@@ -184,7 +182,7 @@ async function rankWithGemini(candidates, seedTitles) {
 
   // Send the top 120 by vote average to stay within token limits.
   const top = [...candidates]
-    .filter((c) => c.voteCount >= 30 || c.popularity >= 15)
+    .filter((c) => c.voteCount >= 100 || c.popularity >= 25)
     .sort((a, b) => b.popularity - a.popularity)
     .slice(0, 120);
 
@@ -227,7 +225,7 @@ Output raw JSON array only — no markdown, no explanation.`;
       .map((r, i) => {
         const candidate = titleMap.get(normalizeTitle(r.title));
         if (!candidate) return null;
-        return { ...candidate, reason: r.reason || '', score: 100 - i };
+        return { ...candidate, reason: r.reason || r.Reason || r.REASON || '', score: 100 - i };
       })
       .filter(Boolean);
 
@@ -243,7 +241,7 @@ async function rankWithDeepSeek(candidates, seedTitles) {
   if (!process.env.DEEPSEEK_API_KEY || candidates.length === 0) return null;
 
   const top = [...candidates]
-    .filter((c) => c.voteCount >= 30 || c.popularity >= 15)
+    .filter((c) => c.voteCount >= 100 || c.popularity >= 25)
     .sort((a, b) => b.popularity - a.popularity)
     .slice(0, 100);
 
@@ -276,7 +274,7 @@ Return JSON array of top 60: [{"title":"...","type":"movie|series","reason":"one
       .map((r, i) => {
         const candidate = titleMap.get(normalizeTitle(r.title));
         if (!candidate) return null;
-        return { ...candidate, reason: r.reason || '', score: 100 - i };
+        return { ...candidate, reason: r.reason || r.Reason || r.REASON || '', score: 100 - i };
       })
       .filter(Boolean);
   } catch (err) {
@@ -322,7 +320,7 @@ async function run(userId = 'default') {
 
   const aiIds = new Set(aiRanked.map((c) => c.tmdbId));
   const fallback = allCandidates
-    .filter((c) => !aiIds.has(c.tmdbId) && (c.voteCount >= 30 || c.popularity >= 15))
+    .filter((c) => !aiIds.has(c.tmdbId) && (c.voteCount >= 100 || c.popularity >= 25))
     .sort((a, b) => b.popularity - a.popularity)
     .map((c, i) => ({ ...c, score: -(i + 1) }));
 
