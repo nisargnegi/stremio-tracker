@@ -139,11 +139,11 @@ app.use(express.json());
 
 // Serve Dashboard HTML
 app.get('/:secret/dashboard', (req, res) => {
-  console.log(`[dashboard debug] req.params.secret='${req.params.secret}', SECRET='${SECRET}'`);
-  const filePath = path.join(__dirname, 'public', 'dashboard.html');
+  const filePath = path.join(__dirname, 'dashboard.html');
   res.sendFile(filePath, (err) => {
     if (err && !res.headersSent) {
-      res.status(500).send(`Dashboard file load error: ${err.message}`);
+      console.error('[dashboard error]', err);
+      res.status(500).send(`Dashboard load error: ${err.message}`);
     }
   });
 });

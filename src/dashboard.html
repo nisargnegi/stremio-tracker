@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stremio Watch Tracker — Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0b0c10;
+      --card-bg: #151720;
+      --card-hover: #1c1f2c;
+      --accent: #7c5cff;
+      --accent-hover: #6842ff;
+      --danger: #ff4757;
+      --text: #e1e1e6;
+      --text-muted: #8a8d9b;
+      --border: #232736;
+      --success: #2ed573;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding-bottom: 40px;
+    }
+
+    header {
+      background: rgba(21, 23, 32, 0.8);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      padding: 16px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 18px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .logo-icon {
+      background: var(--accent);
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+    }
+
+    .nav-tabs {
+      display: flex;
+      background: #0b0c10;
+      padding: 4px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+    .tab-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 8px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .tab-btn.active {
+      background: var(--card-bg);
+      color: var(--text);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .btn {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 9px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s;
+    }
+    .btn:hover { background: var(--accent-hover); transform: translateY(-1px); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    main {
+      max-width: 1300px;
+      margin: 24px auto;
+      padding: 0 24px;
+    }
+
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .search-input {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: #fff;
+      font-size: 14px;
+      width: 300px;
+      max-width: 100%;
+      outline: none;
+    }
+    .search-input:focus { border-color: var(--accent); }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 20px;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: transform 0.2s, border-color 0.2s;
+      position: relative;
+    }
+    .card:hover {
+      transform: translateY(-4px);
+      border-color: #383e56;
+    }
+
+    .poster-wrapper {
+      position: relative;
+      width: 100%;
+      padding-top: 145%;
+      background: #10121a;
+    }
+    .poster-img {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      object-fit: cover;
+    }
+    .poster-fallback {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 40px;
+      color: var(--border);
+    }
+
+    .badge {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: rgba(0,0,0,0.75);
+      backdrop-filter: blur(8px);
+      color: #fff;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 4px 8px;
+      border-radius: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .badge-anime { background: rgba(255, 71, 87, 0.85); }
+    .badge-movie { background: rgba(46, 213, 115, 0.85); }
+    .badge-series { background: rgba(124, 92, 255, 0.85); }
+
+    .card-content {
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+    }
+
+    .card-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 6px;
+      line-height: 1.3;
+    }
+
+    .card-reason {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.4;
+      margin-bottom: 14px;
+      flex: 1;
+      font-style: italic;
+    }
+
+    .card-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: auto;
+    }
+
+    .action-btn {
+      flex: 1;
+      padding: 7px;
+      font-size: 11px;
+      font-weight: 600;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: #1b1e2b;
+      color: var(--text);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .action-btn:hover { background: #252a3d; }
+    .action-btn-watched:hover { background: var(--success); border-color: var(--success); color: #000; }
+    .action-btn-dismiss:hover { background: var(--danger); border-color: var(--danger); color: #fff; }
+
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--card-bg);
+      border: 1px solid var(--accent);
+      color: #fff;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      z-index: 1000;
+      display: none;
+    }
+
+    .spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-radius: 50%;
+      border-top-color: #fff;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="logo">
+      <div class="logo-icon">🍿</div>
+      <span>Watch Tracker</span>
+    </div>
+
+    <div class="nav-tabs">
+      <button class="tab-btn active" onclick="switchTab('recs')">💡 Recommendations (<span id="recs-count">0</span>)</button>
+      <button class="tab-btn" onclick="switchTab('history')">📊 History (<span id="history-count">0</span>)</button>
+    </div>
+
+    <div class="header-actions">
+      <button class="btn" id="refresh-btn" onclick="triggerRefresh()">
+        <span>🔄</span> Refresh Recommendations
+      </button>
+    </div>
+  </header>
+
+  <main>
+    <div class="toolbar">
+      <input type="text" class="search-input" id="search-box" placeholder="Filter by title..." oninput="filterGrid()">
+      <div style="font-size: 12px; color: var(--text-muted);" id="status-info">Dashboard Active</div>
+    </div>
+
+    <div class="grid" id="content-grid"></div>
+    <div class="empty-state" id="empty-state" style="display:none;">No items found.</div>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const SECRET = window.location.pathname.split('/')[1];
+    const API_BASE = `/${SECRET}/api`;
+
+    let allRecs = [];
+    let allHistory = [];
+    let currentTab = 'recs';
+
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      toast.innerText = msg;
+      toast.style.display = 'block';
+      setTimeout(() => { toast.style.display = 'none'; }, 3000);
+    }
+
+    async function loadData() {
+      try {
+        const [recsRes, historyRes] = await Promise.all([
+          fetch(`${API_BASE}/recommendations`),
+          fetch(`${API_BASE}/history`)
+        ]);
+
+        allRecs = await recsRes.json();
+        allHistory = await historyRes.json();
+
+        document.getElementById('recs-count').innerText = allRecs.length;
+        document.getElementById('history-count').innerText = allHistory.length;
+
+        renderGrid();
+      } catch (err) {
+        showToast('Failed to load data: ' + err.message);
+      }
+    }
+
+    function switchTab(tab) {
+      currentTab = tab;
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      event.target.classList.add('active');
+      renderGrid();
+    }
+
+    function filterGrid() {
+      renderGrid();
+    }
+
+    function renderGrid() {
+      const query = document.getElementById('search-box').value.toLowerCase();
+      const grid = document.getElementById('content-grid');
+      const empty = document.getElementById('empty-state');
+
+      grid.innerHTML = '';
+
+      let items = currentTab === 'recs' ? allRecs : allHistory;
+      items = items.filter(i => (i.title || i.imdb_id).toLowerCase().includes(query));
+
+      if (items.length === 0) {
+        empty.style.display = 'block';
+        return;
+      }
+      empty.style.display = 'none';
+
+      items.forEach(item => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.id = `card-${item.imdb_id}`;
+
+        const isAnime = item.is_anime === 1;
+        const badgeClass = isAnime ? 'badge-anime' : (item.type === 'movie' ? 'badge-movie' : 'badge-series');
+        const badgeLabel = isAnime ? 'Anime' : item.type;
+
+        card.innerHTML = `
+          <div class="poster-wrapper">
+            ${item.poster
+              ? `<img class="poster-img" src="${item.poster}" alt="${item.title}" loading="lazy">`
+              : `<div class="poster-fallback">🎬</div>`
+            }
+            <div class="badge ${badgeClass}">${badgeLabel}</div>
+          </div>
+          <div class="card-content">
+            <div class="card-title">${item.title || item.imdb_id}</div>
+            ${currentTab === 'recs' ? `<div class="card-reason">${item.reason || 'Recommended based on watch history'}</div>` : ''}
+            <div class="card-actions">
+              ${currentTab === 'recs' ? `
+                <button class="action-btn action-btn-watched" onclick="markWatched('${item.imdb_id}', '${item.type}')">✓ Watched</button>
+                <button class="action-btn action-btn-dismiss" onclick="dismissRec('${item.imdb_id}')">✕ Hide</button>
+              ` : `
+                <button class="action-btn action-btn-dismiss" onclick="removeHistory('${item.imdb_id}')">Remove</button>
+              `}
+            </div>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    async function markWatched(imdbId, type) {
+      document.getElementById(`card-${imdbId}`)?.remove();
+      showToast('Marked as watched!');
+      await fetch(`/${SECRET}/mark-watched`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imdbId, type })
+      });
+      loadData();
+    }
+
+    async function dismissRec(imdbId) {
+      document.getElementById(`card-${imdbId}`)?.remove();
+      showToast('Dismissed recommendation');
+      await fetch(`${API_BASE}/dismiss`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imdbId })
+      });
+      loadData();
+    }
+
+    async function removeHistory(imdbId) {
+      document.getElementById(`card-${imdbId}`)?.remove();
+      showToast('Removed from history');
+      await fetch(`/${SECRET}/mark-watched`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imdbId })
+      });
+      loadData();
+    }
+
+    async function triggerRefresh() {
+      const btn = document.getElementById('refresh-btn');
+      btn.disabled = true;
+      btn.innerHTML = `<div class="spinner"></div> Generating recommendations...`;
+
+      try {
+        const res = await fetch(`${API_BASE}/recommend/refresh`, { method: 'POST' });
+        const data = await res.json();
+        showToast(data.message || 'Recommendations refreshed!');
+        await loadData();
+      } catch (err) {
+        showToast('Refresh failed: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<span>🔄</span> Refresh Recommendations`;
+      }
+    }
+
+    loadData();
+  </script>
+</body>
+</html>
