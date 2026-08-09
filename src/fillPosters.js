@@ -28,28 +28,27 @@ async function run() {
         const title = info.name || info.title || null;
         const year = parseInt((info.first_air_date || info.release_date || '').slice(0, 4)) || null;
         const tmdbId = info.id || null;
-        const poster = info.poster_path ? \`https://image.tmdb.org/t/p/w300\${info.poster_path}\` : null;
+        const poster = info.poster_path ? `https://image.tmdb.org/t/p/w300${info.poster_path}` : null;
         
-        db.prepare(\`
+        db.prepare(`
           UPDATE items SET title = COALESCE(?, title), year = COALESCE(?, year), tmdb_id = COALESCE(?, tmdb_id), poster = ?
           WHERE imdb_id = ? AND user_id = ?
-        \`).run(title, year, tmdbId, poster, imdbId, userId);
+        `).run(title, year, tmdbId, poster, imdbId, userId);
         
         successCount++;
-        process.stdout.write(\`\\rProcessed \${i + 1}/\${items.length} (\${title || imdbId})          \`);
+        process.stdout.write(`\\rProcessed ${i + 1}/${items.length} (${title || imdbId})          `);
       } else {
         errorCount++;
       }
     } catch (err) {
       errorCount++;
-      console.error(\`\\n[fillPosters] Failed for \${imdbId}: \${err.message}\`);
+      console.error(`\\n[fillPosters] Failed for ${imdbId}: ${err.message}`);
     }
 
     // Small delay to respect TMDB rate limits (50 req/sec max)
     await new Promise(resolve => setTimeout(resolve, 100));
   }
-
-  console.log(\`\\n\\nFinished! Successfully enriched: \${successCount}, Failed: \${errorCount}\`);
+  console.log(`\n\nFinished! Successfully enriched: ${successCount}, Failed: ${errorCount}`);
 }
 
 if (require.main === module) {
