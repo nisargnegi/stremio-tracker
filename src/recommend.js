@@ -1,4 +1,4 @@
-// recommend.js — run weekly (or whenever). Two-stage recommendation:
+// recommend.js â€” run weekly (or whenever). Two-stage recommendation:
 // 1. TMDB "similar/recommended" endpoints generate free candidates from
 //    your highly-rated/watched items (no LLM cost).
 // 2. Gemini (optional, free tier) re-ranks the pool and writes a one-line
@@ -20,14 +20,16 @@ function detectAnime(item) {
 }
 
 async function gatherCandidates(db, userId) {
-  const seeds = db.prepare(`
+  const getSeeds = (type) => db.prepare(`
     SELECT i.imdb_id, i.tmdb_id, i.type, i.title
     FROM items i
     LEFT JOIN ratings r ON r.imdb_id = i.imdb_id AND r.user_id = i.user_id
-    WHERE i.user_id = ? AND i.tmdb_id IS NOT NULL
+    WHERE i.user_id = ? AND i.tmdb_id IS NOT NULL AND i.type = ?
     ORDER BY COALESCE(r.rating, 0) DESC
-    LIMIT 25
-  `).all(userId);
+    LIMIT 20
+  `).all(userId, type);
+
+  const seeds = [...getSeeds('movie'), ...getSeeds('series')];
 
   const candidates = new Map();
   for (const seed of seeds) {
@@ -58,7 +60,7 @@ async function rankWithGemini(candidates, seedTitles) {
   const model = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
   const prompt = `Given someone who enjoyed: ${seedTitles.join(', ')}.
 Here are candidate titles: ${candidates.map((c) => c.title).join(', ')}.
-Return a JSON array of the top 20 best matches, each object having exactly two keys: "title" and "reason" (one short sentence why it fits). Output raw JSON only — no markdown, no code fences, no extra text.`;
+Return a JSON array of the top 40 best matches, each object having exactly two keys: "title" and "reason" (one short sentence why it fits). Output raw JSON only â€” no markdown, no code fences, no extra text.`;
 
   try {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
@@ -93,7 +95,7 @@ async function rankWithDeepSeek(candidates, seedTitles) {
 
   const prompt = `Given someone who enjoyed: ${seedTitles.join(', ')}.
 Here are candidate titles: ${candidates.map((c) => c.title).join(', ')}.
-Return a JSON array of the top 20, each as {"title": "...", "reason": "one short sentence"}. JSON only, no prose.`;
+Return a JSON array of the top 40, each as {"title": "...", "reason": "one short sentence"}. JSON only, no prose.`;
 
   try {
     const res = await fetch('https://api.deepseek.com/chat/completions', {
@@ -142,7 +144,7 @@ async function run(userId = 'default') {
     .filter((c) => !aiIds.has(c.tmdbId))
     .map((c, i) => ({ ...c, score: -(i + 1) }));
 
-  const toCache = [...aiRanked, ...tmdbFallback].slice(0, 40);
+  const toCache = [...aiRanked, ...tmdbFallback].slice(0, 200);
 
   const upsert = db.prepare(`
     INSERT INTO recommendations_cache (user_id, imdb_id, type, title, poster, is_anime, score, reason)

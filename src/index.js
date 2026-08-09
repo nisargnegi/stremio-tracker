@@ -78,7 +78,7 @@ builder.defineCatalogHandler(({ type, id }) => {
       SELECT imdb_id, title, poster FROM recommendations_cache
       WHERE type = ? AND (is_anime = 0 OR type = 'movie')
       ORDER BY score DESC
-      LIMIT 40
+      LIMIT 100
     `).all(type);
 
     return Promise.resolve({
@@ -91,7 +91,7 @@ builder.defineCatalogHandler(({ type, id }) => {
       SELECT imdb_id, title, poster FROM recommendations_cache
       WHERE type = 'series' AND is_anime = 1
       ORDER BY score DESC
-      LIMIT 40
+      LIMIT 100
     `).all();
 
     return Promise.resolve({
