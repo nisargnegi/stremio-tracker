@@ -111,7 +111,7 @@ builder.defineCatalogHandler(({ type, id }) => {
 // secret segment in the path means the addon 404s for everyone except
 // whoever has the exact install URL you generated.
 
-const SECRET = process.env.APP_SECRET;
+const SECRET = (process.env.APP_SECRET || '').trim();
 const INSECURE_DEFAULT = 'change-me-to-a-random-string';
 
 if (!SECRET || SECRET === INSECURE_DEFAULT) {
@@ -140,7 +140,7 @@ app.use(express.json());
 
 // Serve Dashboard HTML
 app.get('/:secret/dashboard', (req, res) => {
-  if (req.params.secret !== SECRET) return res.status(404).end();
+  if ((req.params.secret || '').trim() !== SECRET) return res.status(404).end();
   const filePath = path.join(__dirname, 'public', 'dashboard.html');
   res.sendFile(filePath, (err) => {
     if (err && !res.headersSent) {
