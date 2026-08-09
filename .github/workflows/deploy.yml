@@ -14,9 +14,9 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
-          username: root
+          username: ${{ secrets.VPS_USERNAME || 'root' }}
           password: ${{ secrets.VPS_PASSWORD }}
-          port: 22
+          port: ${{ secrets.VPS_PORT || 22 }}
           script: |
             cd ~/stremio-tracker
             git fetch --all
