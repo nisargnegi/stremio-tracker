@@ -6,21 +6,34 @@ const fetch = require('node-fetch');
 
 const BASE = 'https://api.themoviedb.org/3';
 
-// Read key lazily (inside each call) so dotenv load order doesn't matter.
 function key() {
   const k = process.env.TMDB_API_KEY;
   if (!k) throw new Error('TMDB_API_KEY is not set in .env');
   return k;
 }
 
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+// Retries on 429 (rate limit) with Retry-After header backoff.
 async function tmdbGet(endpoint, params = {}) {
   const url = new URL(BASE + endpoint);
   url.searchParams.set('api_key', key());
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
 
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`TMDB ${endpoint} failed: ${res.status}`);
-  return res.json();
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const res = await fetch(url);
+    if (res.status === 429) {
+      const wait = parseInt(res.headers.get('Retry-After') || '8', 10) * 1000;
+      console.warn(`[tmdb] 429 rate-limit on ${endpoint}, waiting ${wait}ms…`);
+      await sleep(wait);
+      continue;
+    }
+    if (!res.ok) throw new Error(`TMDB ${endpoint} failed: ${res.status}`);
+    return res.json();
+  }
+  throw new Error(`TMDB ${endpoint} failed after retries`);
 }
 
 // Stremio/Cinemeta content is keyed by IMDb id. TMDB needs its own numeric id.
@@ -32,10 +45,10 @@ async function findByImdbId(imdbId) {
   };
 }
 
-// append_to_response=external_ids gives us the imdb_id in one call —
-// without it, TV show responses don't include imdb_id and recommendations break.
+// append_to_response=external_ids gives us the imdb_id in one call.
+// We also request keywords so downstream code can detect anime more reliably.
 async function getShowDetails(tmdbId) {
-  return tmdbGet(`/tv/${tmdbId}`, { append_to_response: 'external_ids' });
+  return tmdbGet(`/tv/${tmdbId}`, { append_to_response: 'external_ids,keywords' });
 }
 
 async function getMovieDetails(tmdbId) {
@@ -54,7 +67,6 @@ async function getSimilar(tmdbId, type, page = 1) {
   return data.results || [];
 }
 
-// Trending — supports 'day' or 'week' window; defaults to week.
 async function getTrending(type, window = 'week', page = 1) {
   const kind = type === 'movie' ? 'movie' : 'tv';
   const data = await tmdbGet(`/trending/${kind}/${window}`, { page });
@@ -67,42 +79,31 @@ async function getTopRated(type, page = 1) {
   return data.results || [];
 }
 
-// Popular — separate signal from top_rated; catches mainstream/recent hits.
 async function getPopular(type, page = 1) {
   const kind = type === 'movie' ? 'movie' : 'tv';
   const data = await tmdbGet(`/${kind}/popular`, { page });
   return data.results || [];
 }
 
-// Now playing (movies) / On the air (TV) — currently releasing content.
 async function getNowPlayingOrOnAir(type, page = 1) {
   const endpoint = type === 'movie' ? '/movie/now_playing' : '/tv/on_the_air';
   const data = await tmdbGet(endpoint, { page });
   return data.results || [];
 }
 
-// Discover — the most powerful TMDB endpoint. Filter by genre IDs,
-// vote average, language, etc. Returns up to 20 results per page.
-// genreIds: array of TMDB genre IDs (e.g. [28, 12] for Action+Adventure)
+// Discover — filter by genre IDs, vote average, language, etc.
 async function discover(type, { genreIds = [], minVote = 6.5, language = null, page = 1 } = {}) {
   const kind = type === 'movie' ? 'movie' : 'tv';
   const params = {
     page,
     'vote_average.gte': minVote,
-    'vote_count.gte': 100, // filter out obscure titles with 1-star from 5 people
+    'vote_count.gte': 100,
     sort_by: 'vote_average.desc',
   };
   if (genreIds.length > 0) params.with_genres = genreIds.join(',');
   if (language) params.with_original_language = language;
   const data = await tmdbGet(`/discover/${kind}`, params);
   return data.results || [];
-}
-
-// Fetch the list of all TMDB genres for a given type.
-async function getGenres(type) {
-  const kind = type === 'movie' ? 'movie' : 'tv';
-  const data = await tmdbGet(`/genre/${kind}/list`);
-  return data.genres || []; // [{ id, name }, ...]
 }
 
 module.exports = {
@@ -116,5 +117,5 @@ module.exports = {
   getPopular,
   getNowPlayingOrOnAir,
   discover,
-  getGenres,
+  sleep,
 };
