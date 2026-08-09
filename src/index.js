@@ -132,60 +132,9 @@ app.disable('x-powered-by');
 // blunts casual scanning/abuse if the secret ever leaks.
 app.use(rateLimit({ windowMs: 60 * 1000, max: 120 }));
 
-// Everything the addon serves lives under /<secret>/... — this is what
-// makes the install URL effectively a bearer token.
-app.use(`/${SECRET}`, getRouter(builder.getInterface()));
-
-// ---- Manual watch management endpoints (behind the same secret) ----
-//
-// POST /<secret>/mark-watched   body: { imdbId, type }
-//   Marks an item as watched so it's excluded from future recommendations.
-//   Useful for things you've already seen but didn't watch via Stremio.
-//
-// DELETE /<secret>/mark-watched body: { imdbId }
-//   Removes the watched record so it can be recommended again.
-
 app.use(express.json());
 
-app.post(`/${SECRET}/mark-watched`, (req, res) => {
-  const { imdbId, type } = req.body || {};
-  if (!imdbId || !['movie', 'series'].includes(type)) {
-    return res.status(400).json({ error: 'imdbId and type (movie|series) required' });
-  }
-  try {
-    // Ensure the item exists in the items table
-    db.prepare(`
-      INSERT INTO items (imdb_id, user_id, type, status)
-      VALUES (?, 'default', ?, 'watching')
-      ON CONFLICT(imdb_id, user_id) DO NOTHING
-    `).run(imdbId, type);
-    // Mark as watched
-    db.prepare(`
-      INSERT INTO watched (user_id, imdb_id, type, source)
-      VALUES ('default', ?, ?, 'manual')
-      ON CONFLICT(user_id, imdb_id, season, episode) DO NOTHING
-    `).run(imdbId, type);
-    // Remove from recommendations cache
-    db.prepare(`DELETE FROM recommendations_cache WHERE imdb_id = ?`).run(imdbId);
-    res.json({ ok: true, message: `${imdbId} marked as watched` });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.delete(`/${SECRET}/mark-watched`, (req, res) => {
-  const { imdbId } = req.body || {};
-  if (!imdbId) return res.status(400).json({ error: 'imdbId required' });
-  try {
-    db.prepare(`DELETE FROM watched WHERE imdb_id = ? AND user_id = 'default'`).run(imdbId);
-    db.prepare(`DELETE FROM items WHERE imdb_id = ? AND user_id = 'default'`).run(imdbId);
-    res.json({ ok: true, message: `${imdbId} removed from watched` });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ---- Web Dashboard Routes ----
+// ---- Web Dashboard & Manual API Routes ----
 
 // Serve Dashboard HTML
 app.get(`/${SECRET}/dashboard`, (req, res) => {
@@ -245,6 +194,44 @@ app.post(`/${SECRET}/api/recommend/refresh`, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+app.post(`/${SECRET}/mark-watched`, (req, res) => {
+  const { imdbId, type } = req.body || {};
+  if (!imdbId || !['movie', 'series'].includes(type)) {
+    return res.status(400).json({ error: 'imdbId and type (movie|series) required' });
+  }
+  try {
+    db.prepare(`
+      INSERT INTO items (imdb_id, user_id, type, status)
+      VALUES (?, 'default', ?, 'watching')
+      ON CONFLICT(imdb_id, user_id) DO NOTHING
+    `).run(imdbId, type);
+    db.prepare(`
+      INSERT INTO watched (user_id, imdb_id, type, source)
+      VALUES ('default', ?, ?, 'manual')
+      ON CONFLICT(user_id, imdb_id, season, episode) DO NOTHING
+    `).run(imdbId, type);
+    db.prepare(`DELETE FROM recommendations_cache WHERE imdb_id = ?`).run(imdbId);
+    res.json({ ok: true, message: `${imdbId} marked as watched` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete(`/${SECRET}/mark-watched`, (req, res) => {
+  const { imdbId } = req.body || {};
+  if (!imdbId) return res.status(400).json({ error: 'imdbId required' });
+  try {
+    db.prepare(`DELETE FROM watched WHERE imdb_id = ? AND user_id = 'default'`).run(imdbId);
+    db.prepare(`DELETE FROM items WHERE imdb_id = ? AND user_id = 'default'`).run(imdbId);
+    res.json({ ok: true, message: `${imdbId} removed from watched` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Stremio SDK Router — handles manifest, catalog, stream requests
+app.use(`/${SECRET}`, getRouter(builder.getInterface()));
 
 // Anything outside the secret path (including a bare "/") gets nothing
 // useful back — no hints about what this server is.
