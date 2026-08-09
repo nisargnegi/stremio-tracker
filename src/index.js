@@ -216,6 +216,31 @@ app.use(`/${SECRET}`, (req, res, next) => {
     }
   }
 
+  // API: debug — test Gemini connectivity and env vars from the VPS
+  if (url === '/api/debug' && req.method === 'GET') {
+    const geminiKey = process.env.GEMINI_API_KEY;
+    const geminiModel = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+    const tmdbKey = process.env.TMDB_API_KEY;
+    const info = {
+      GEMINI_API_KEY: geminiKey ? `set (${geminiKey.slice(0, 6)}...)` : 'NOT SET',
+      GEMINI_MODEL: geminiModel,
+      TMDB_API_KEY: tmdbKey ? `set (${tmdbKey.slice(0, 6)}...)` : 'NOT SET',
+      node_version: process.version,
+    };
+    if (!geminiKey) return res.json({ ...info, gemini_test: 'skipped_no_key' });
+    const nodeFetch = require('node-fetch');
+    const testUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${geminiKey}`;
+    nodeFetch(testUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [{ text: 'Reply with exactly the JSON: {"ok":true}' }] }] }),
+    })
+      .then((r) => r.json())
+      .then((data) => res.json({ ...info, gemini_test: data.error ? 'api_error' : 'success', gemini_raw: data }))
+      .catch((err) => res.json({ ...info, gemini_test: 'network_error', error: err.message }));
+    return;
+  }
+
   next();
 });
 
