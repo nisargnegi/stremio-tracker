@@ -1,258 +1,229 @@
-# Watch Tracker for Stremio
+# 🎬 Watch Tracker for Stremio
 
-A self-hosted, free Trakt replacement built for Stremio. Tracks what you watch
-automatically (no "mark as watched" clicks), tells you when a new episode
-airs for a show you're following, and recommends what to watch next.
+A self-hosted, private, free Trakt replacement built specifically for **Stremio**. Tracks what you watch automatically (without needing to click "mark as watched"), notifies you when a new episode airs for a show you're following, and generates personalized recommendations for what to watch next.
 
-Built because Trakt's free tier now limits you to one connected app and its
-Stremio scrobbling is unreliable — especially on Android TV. This tool
-doesn't depend on Stremio's built-in scrobbler at all.
+Built because Trakt's free tier limits connected applications and its Stremio scrobbling can be unreliable (especially on Android TV). This tool operates independently of Stremio's built-in scrobbler.
 
-## How it works
+---
 
-- Installed as a normal Stremio addon. Every time you open a movie or
-  episode, Stremio asks all your addons for streams — this addon uses that
-  moment purely as a "you're about to watch this" signal and logs it. It
-  returns zero actual streams, so your real streaming addons are unaffected.
-- **Auto-advance**: opening episode 4 marks episode 3 watched. No clicking.
-- **Timeout sweep**: catches the last episode of a series (nothing "comes
-  after" it to trigger auto-advance) — marked watched a few hours after
-  it's opened if nothing newer shows up.
-- **New episode alerts**: a daily check against TMDB's air-date data pushes
-  a Telegram/ntfy notification when a show you're tracking has a new
-  episode out.
-- **Recommendations**: TMDB's free recommendation engine generates
-  candidates from your history; an optional DeepSeek API call re-ranks them
-  and writes a one-line reason (costs pennies a month).
+## 🔥 Key Features
 
-## What you need (all free)
+- **Automatic Watch Tracking**: Seamlessly hooks into Stremio's stream requests. Whenever you open an episode or movie, it logs your viewing activity automatically without interfering with your streaming addons.
+- **Auto-Advance**: Opening Episode 4 automatically marks Episode 3 as watched.
+- **Timeout Sweep**: Automatically marks series finales or single movies watched after a configurable time window.
+- **New Episode Notifications**: Daily automated check against TMDB air dates with instant alerts via **Telegram** or **ntfy.sh**.
+- **AI-Powered Recommendations**: Generates candidate picks from your viewing history via TMDB, re-ranked with customized one-line summaries using **Gemini 2.5 Flash** or **DeepSeek**.
+- **Web Dashboard**: Included interactive web interface to view watch history, manage recommendations, and trigger manual syncs.
+- **Automated CI/CD**: Built-in GitHub Actions workflow for zero-downtime SSH deployment to your VPS.
 
-- A small VPS or server that's on 24/7 (see hosting steps below)
-- A [TMDB API key](https://www.themoviedb.org/settings/api) (free, instant)
-- A Telegram bot **or** an [ntfy.sh](https://ntfy.sh) topic, for notifications
-- Optionally, a [DeepSeek API key](https://platform.deepseek.com) for the
-  recommendation re-ranking (optional — everything else works without it)
+---
 
-## Quick start (local test)
+## 🔒 Security & Public Git Safety
+
+This codebase is **100% safe for public GitHub repositories**. All sensitive data, domain names, and credentials are fully externalized:
+
+1. **Environment Separation (`.env`)**:
+   - All secret tokens, API keys, and database paths are loaded via environment variables.
+   - `.env` files and SQLite databases (`*.db`, `data/`) are strictly ignored by `.gitignore`.
+2. **Secret Path URL Hardening (`APP_SECRET`)**:
+   - Your Stremio addon manifest is served behind a cryptographically random secret URL path (`https://yourdomain.com/YOUR_APP_SECRET/manifest.json`).
+   - Requests outside this secret path return `404 Not Found`, preventing unauthorized access or scanning.
+3. **Network & Container Isolation**:
+   - The addon server runs on internal port `7000` and is **never exposed directly to the public internet**.
+   - All traffic routes strictly through **Caddy** via Docker internal DNS.
+   - Containers run with `read_only: true` filesystems and `no-new-privileges: true`.
+4. **CI/CD Security**:
+   - GitHub Actions workflow uses encrypted repository secrets (`VPS_HOST`, `VPS_USERNAME`, `VPS_SSH_KEY`).
+
+---
+
+## 📋 Requirements (All Free)
+
+- A small VPS or server that runs 24/7 (Oracle Cloud Always Free, DigitalOcean, Hetzner, Vultr, etc.)
+- A free [TMDB API Key](https://www.themoviedb.org/settings/api)
+- A Telegram bot or an [ntfy.sh](https://ntfy.sh) topic for notifications
+- *(Optional)* A free [Gemini API Key](https://aistudio.google.com/apikey) or [DeepSeek API Key](https://platform.deepseek.com) for AI recommendation re-ranking
+- A free [DuckDNS](https://www.duckdns.org) subdomain for automatic HTTPS
+
+---
+
+## 🚀 Quick Start (Local Development)
 
 ```bash
-git clone <this-repo>
+# 1. Clone the repository
+git clone https://github.com/YOUR_USERNAME/stremio-tracker.git
 cd stremio-tracker
+
+# 2. Copy the environment configuration template
 cp .env.example .env
-# edit .env: add your TMDB_API_KEY and a notification method
+
+# 3. Edit .env and set your TMDB_API_KEY and APP_SECRET
+nano .env
+
+# 4. Install dependencies and start the server
 npm install
 npm start
 ```
 
-Open Stremio → Addons → paste `http://localhost:7000/manifest.json` → Install.
+Open Stremio → Addons → Search Bar → Paste:
+`http://localhost:7000/YOUR_APP_SECRET/manifest.json` → Click **Install**.
 
-If you have an old Trakt account, migrate your history first:
+---
+
+## 🌐 Production VPS Deployment (Docker + Caddy + HTTPS)
+
+### Step 1: Set Up Your VPS (Ubuntu/Debian)
+
+1. Provision a VPS (e.g. Oracle Cloud Always Free, Ubuntu 22.04 / 24.04 LTS).
+2. Connect to your VPS via SSH:
+   ```bash
+   ssh ubuntu@YOUR_VPS_IP
+   ```
+3. Install Docker & Docker Compose:
+   ```bash
+   sudo apt update
+   sudo apt install -y docker.io docker-compose-plugin
+   sudo systemctl enable --now docker
+   sudo usermod -aG docker $USER
+   ```
+4. Log out and back in for group permissions to take effect:
+   ```bash
+   exit
+   ssh ubuntu@YOUR_VPS_IP
+   ```
+
+### Step 2: Configure Domain & DNS (DuckDNS)
+
+1. Log in at [duckdns.org](https://www.duckdns.org).
+2. Create a subdomain (e.g., `my-stremio-tracker` -> `my-stremio-tracker.duckdns.org`) pointing to `YOUR_VPS_IP`.
+3. Note down your DuckDNS **token** and **subdomain**.
+
+### Step 3: Open VPS Firewall Ports
+
+Caddy requires ports **80** (HTTP verification) and **443** (HTTPS) open. Internal port `7000` remains closed.
 
 ```bash
-unzip trakt-export.zip -d trakt-export
-npm run import-trakt trakt-export
+# Enable UFW rules on Ubuntu
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw allow OpenSSH
+sudo ufw enable
 ```
+*(Note: If using Oracle Cloud, also add Ingress Rules for ports 80 and 443 in the Oracle Cloud Console Security List).*
 
-## Hosting it for real (beginner walkthrough)
-
-You need a server that stays on all the time — your own laptop won't work
-unless it never sleeps. The cheapest reliable option is a free-tier VPS.
-
-**Why this setup needs more than "just open a port":** Stremio requires
-HTTPS for any addon URL that isn't `127.0.0.1` — a plain `http://your-ip:7000`
-address will not work from Android TV or any remote device. On top of that,
-your addon is reachable from the entire internet once it's HTTPS-exposed,
-so it needs something stopping strangers from finding and hitting it. This
-setup handles both with two free tools: **DuckDNS** (a free domain name) and
-**Caddy** (automatic HTTPS + reverse proxy), plus a secret-path URL baked
-into the app itself.
-
-### Step 1: Get a free VPS (Oracle Cloud "Always Free" tier)
-
-1. Sign up at [oracle.com/cloud/free](https://www.oracle.com/cloud/free/).
-   Needs a card for identity verification but the Always Free tier genuinely
-   never charges you as long as you stay within its limits (plenty for this).
-2. Create a new **Compute Instance**:
-   - Image: **Ubuntu 22.04** (or newer)
-   - Shape: pick one of the "Always Free eligible" shapes (VM.Standard.E2.1.Micro
-     or the Ampere ARM option — either works fine for this project)
-3. Download the SSH key it generates when you create the instance — you'll
-   need it to log in.
-4. Note the instance's **public IP address**, shown on the instance's page.
-
-### Step 2: Connect to your server
-
-On Mac/Linux (or Windows with WSL/PowerShell):
+### Step 4: Clone & Configure Project on VPS
 
 ```bash
-chmod 400 path/to/downloaded-key.key
-ssh -i path/to/downloaded-key.key ubuntu@YOUR_SERVER_IP
-```
-
-You're now typing commands directly on your VPS.
-
-### Step 3: Install Docker
-
-```bash
-sudo apt update
-sudo apt install -y docker.io docker-compose-plugin
-sudo systemctl enable --now docker
-sudo usermod -aG docker $USER
-```
-
-Log out and back in (`exit`, then reconnect via SSH) for the permission
-change to apply.
-
-### Step 4: Get a free domain name (DuckDNS)
-
-1. Go to [duckdns.org](https://www.duckdns.org) and sign in (GitHub/Google —
-   no separate account to create).
-2. Create a subdomain, e.g. `jarvis-tracker` → gives you
-   `jarvis-tracker.duckdns.org`, pointed at your server's IP.
-3. Copy the **token** shown on the DuckDNS page — you'll need it below.
-
-### Step 5: Get the project onto the server
-
-```bash
-git clone <this-repo>
+git clone https://github.com/YOUR_USERNAME/stremio-tracker.git
 cd stremio-tracker
 cp .env.example .env
 ```
 
-Generate a real secret for your addon's install URL — **do not skip this**:
-
+Generate a secure random secret for your addon URL:
 ```bash
 openssl rand -hex 16
 ```
 
-Copy the output, then edit the config:
-
+Edit `.env`:
 ```bash
 nano .env
 ```
+Fill in the values:
+```env
+TMDB_API_KEY=your_tmdb_key_here
+PORT=7000
+DB_PATH=./data/tracker.db
 
-Fill in:
-- `TMDB_API_KEY` — from themoviedb.org
-- `APP_SECRET` — the random string you just generated
-- `DUCKDNS_SUBDOMAIN` — just the subdomain part, e.g. `jarvis-tracker`
-- `DUCKDNS_TOKEN` — from the DuckDNS page
-- `DUCKDNS_DOMAIN` — the full domain, e.g. `jarvis-tracker.duckdns.org`
-- Your notification method (`TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID`, or `NTFY_TOPIC`)
+# Notifications (Telegram or ntfy)
+TELEGRAM_BOT_TOKEN=your_bot_token
+TELEGRAM_CHAT_ID=your_chat_id
 
-Save with `Ctrl+X`, then `Y`, then `Enter`.
+# Optional AI Recommendations
+GEMINI_API_KEY=your_gemini_key
 
-### Step 6: Open only the ports you actually need
+# Security Path Secret
+APP_SECRET=your_generated_random_secret_here
 
-Oracle's cloud firewall blocks ports by default, separate from Ubuntu's own
-`ufw`. You only need **80** (for HTTPS certificate setup) and **443**
-(actual HTTPS traffic) open to the world — never 7000, since that's the
-addon's internal-only port now.
+# Domain Config (DuckDNS)
+DUCKDNS_SUBDOMAIN=my-stremio-tracker
+DUCKDNS_TOKEN=your_duckdns_token
+DUCKDNS_DOMAIN=my-stremio-tracker.duckdns.org
+```
 
-1. In the Oracle Cloud console: your instance → **Subnet** → **Security
-   Lists** → **Default Security List** → **Add Ingress Rule**.
-   Add two rules: Source CIDR `0.0.0.0/0`, Destination Ports `80` and `443`,
-   Protocol TCP.
-2. On the server itself:
-   ```bash
-   sudo ufw allow 80
-   sudo ufw allow 443
-   sudo ufw allow OpenSSH   # don't lock yourself out of SSH
-   sudo ufw enable
-   ```
-
-### Step 7: Run it
+### Step 5: Start the Docker Stack
 
 ```bash
 docker compose up -d --build
 ```
 
-Give it a minute for Caddy to fetch its HTTPS certificate, then check:
+Caddy will automatically provision a free Let's Encrypt SSL/TLS certificate.
+
+Verify that your manifest is accessible over HTTPS:
+```bash
+curl https://my-stremio-tracker.duckdns.org/YOUR_APP_SECRET/manifest.json
+```
+
+---
+
+## 🤖 Automated CI/CD (GitHub Actions)
+
+This repository includes an automated deployment workflow `.github/workflows/deploy.yml` that automatically deploys changes to your VPS whenever you push to `main` or `master`.
+
+### Setting Up GitHub Secrets:
+
+Navigate to your GitHub Repository → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**:
+
+| Secret Name | Value Description |
+| :--- | :--- |
+| `VPS_HOST` | Public IP address or domain of your VPS (e.g. `123.45.67.89`) |
+| `VPS_USERNAME` | SSH user on your VPS (e.g. `ubuntu` or `root`) |
+| `VPS_SSH_KEY` | Private SSH key (contents of `~/.ssh/id_rsa` or `~/.ssh/id_ed25519`) |
+
+Whenever you push commits to GitHub, the workflow will log in to your VPS via SSH, pull the latest code, and restart the containers via `docker compose up -d --build`.
+
+---
+
+## 📦 Trakt Migration (Import History)
+
+If you have exported your watch history from Trakt:
 
 ```bash
-curl https://YOUR_DUCKDNS_DOMAIN/YOUR_APP_SECRET/manifest.json
-```
-
-Should return JSON. If it doesn't, check logs: `docker compose logs -f caddy`
-and `docker compose logs -f addon`.
-
-### Step 8: Install in Stremio
-
-On your Android TV (or any device), in Stremio → Addons (puzzle icon) →
-search bar at the top → paste:
-
-```
-https://YOUR_DUCKDNS_DOMAIN/YOUR_APP_SECRET/manifest.json
-```
-
-→ Install. Keep this full URL private — treat it like a password, since it's
-what protects your addon from strangers.
-
-If you had a Trakt export, import it once from inside the container:
-
-```bash
+# 1. Create directory and extract export files
 mkdir -p data/trakt-export
 unzip trakt-export.zip -d data/trakt-export
+
+# 2. Run the import script inside the running container
 docker compose exec addon node src/importTrakt.js /app/data/trakt-export
 ```
 
-### Keeping it updated
+---
 
-```bash
-cd stremio-tracker
-git pull
-docker compose up -d --build
-```
-
-## Security notes
-
-- **The install URL is the only thing protecting your data.** Anyone with
-  it can view/pollute your watch history. Don't post it publicly, don't
-  commit `.env` to a public repo (it's already in `.gitignore`), and if you
-  ever suspect it's leaked, change `APP_SECRET` and reinstall the addon in
-  Stremio with the new URL.
-- **Port 7000 is never exposed to the internet** — only Caddy (ports 80/443)
-  is reachable externally; the addon container only talks to Caddy over
-  Docker's private internal network.
-- **Rate limiting** is built into the app (120 requests/minute) to blunt
-  casual scanning even if the secret leaks.
-- **Containers run with `no-new-privileges` and a read-only root filesystem**
-  where possible, limiting what an attacker could do even with code
-  execution inside a container.
-- This setup is sized for **one person or a small friend group** self-hosting
-  their own instance each — it is not designed to be a public multi-tenant
-  service. If you want to run one instance for many strangers, you'd want
-  proper auth (not just a secret path) and a security review first.
-
-## Sharing this with others (multi-user notes)
-
-This repo defaults to single-user (`user_id = 'default'`), which is the
-simplest and most reliable setup for one household. If you want to host one
-instance for a friend group:
-
-- Set `MULTI_USER=true` in `.env`
-- Give each person a unique addon install URL
-  (`http://your-server:7000/USER_ID/manifest.json`) — this is a stub in the
-  current schema (the `user_id` column already supports it) but the routing
-  layer to generate per-user URLs isn't wired up in this initial version.
-  Flagging it here so anyone building on this knows where to start; PRs
-  welcome.
-- Everyone's data stays isolated by `user_id` in the same SQLite file — no
-  separate databases needed for a small group.
-
-## Project structure
+## 📁 Project Directory Overview
 
 ```
-src/
-  index.js         — the Stremio addon server + tracking hook
-  db.js            — SQLite schema
-  watchTracker.js  — auto-advance + timeout-sweep logic
-  tmdb.js          — TMDB API wrapper
-  notify.js        — Telegram/ntfy push notifications
-  cron.js          — daily new-episode check + timeout sweep
-  recommend.js      — weekly recommendation refresh (TMDB + optional DeepSeek)
-  importTrakt.js   — one-time Trakt export importer
+stremio-tracker/
+├── .github/
+│   └── workflows/
+│       └── deploy.yml      # GitHub Actions auto-deployment pipeline
+├── src/
+│   ├── index.js            # Express server, Stremio addon routes, security filter
+│   ├── watchTracker.js     # Auto-advance & timeout-sweep logic
+│   ├── db.js               # SQLite database initialization & query helpers
+│   ├── tmdb.js             # TMDB API client
+│   ├── notify.js           # Telegram & ntfy.sh notification handler
+│   ├── cron.js             # Automated daily background job runner
+│   ├── recommend.js        # Recommendation generator with AI re-ranking
+│   └── importTrakt.js      # Trakt JSON export importer
+├── Caddyfile               # Caddy reverse proxy configuration
+├── Dockerfile              # Production Node.js multi-stage container file
+├── docker-compose.yml      # Orchestration for addon service & Caddy proxy
+├── .env.example            # Environment variables template
+├── .gitignore              # Git ignore rules for secrets and runtime data
+└── README.md               # Documentation
 ```
 
-## License
+---
 
-MIT — do whatever you want with it.
+## 📄 License
+
+[MIT License](LICENSE) - Open source and free for personal use.

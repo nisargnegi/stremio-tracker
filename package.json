@@ -7,6 +7,8 @@
   "scripts": {
     "start": "node src/index.js",
     "cron": "node src/cron.js",
+    "recommend": "node src/recommend.js",
+    "fill-posters": "node src/fillPosters.js",
     "import-trakt": "node src/importTrakt.js"
   },
   "dependencies": {

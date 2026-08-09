@@ -36,13 +36,13 @@ async function run() {
         `).run(title, year, tmdbId, poster, imdbId, userId);
         
         successCount++;
-        process.stdout.write(`\\rProcessed ${i + 1}/${items.length} (${title || imdbId})          `);
+        process.stdout.write(`\rProcessed ${i + 1}/${items.length} (${title || imdbId})          `);
       } else {
         errorCount++;
       }
     } catch (err) {
       errorCount++;
-      console.error(`\\n[fillPosters] Failed for ${imdbId}: ${err.message}`);
+      console.error(`\n[fillPosters] Failed for ${imdbId}: ${err.message}`);
     }
 
     // Small delay to respect TMDB rate limits (50 req/sec max)

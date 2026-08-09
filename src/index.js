@@ -138,22 +138,30 @@ app.use(rateLimit({ windowMs: 60 * 1000, max: 120 }));
 
 app.use(express.json());
 
-// ---- Web Dashboard & API Middleware ----
+// Public health check — intentionally no secret required so Docker / Caddy
+// health probes can reach it without knowing APP_SECRET.
+app.get('/health', (req, res) => res.json({ ok: true }));
 
-app.use((req, res, next) => {
+// ---- Authenticated sub-router: Dashboard + API + Stremio addon ----
+// Everything below requires the correct APP_SECRET in the URL path.
+// Requests without it fall through to the 404 handler at the bottom.
+
+app.use(`/${SECRET}`, (req, res, next) => {
   const url = req.url || '';
 
-  if (url.includes('dashboard')) {
+  // Dashboard HTML
+  if (url === '/dashboard' || url === '/dashboard/') {
     try {
       const html = fs.readFileSync(path.join(__dirname, 'dashboard.html'), 'utf8');
       res.setHeader('Content-Type', 'text/html');
       return res.send(html);
     } catch (err) {
-      return res.status(500).send(`Dashboard read error: ${err.message} at ${path.join(__dirname, 'dashboard.html')}`);
+      return res.status(500).send(`Dashboard read error: ${err.message}`);
     }
   }
 
-  if (url.includes('/api/recommendations')) {
+  // API: list recommendations
+  if (url === '/api/recommendations' && req.method === 'GET') {
     try {
       const rows = db.prepare(`
         SELECT imdb_id, type, title, poster, is_anime, score, reason, updated_at
@@ -167,7 +175,8 @@ app.use((req, res, next) => {
     }
   }
 
-  if (url.includes('/api/history')) {
+  // API: watch history
+  if (url === '/api/history' && req.method === 'GET') {
     try {
       const rows = db.prepare(`
         SELECT imdb_id, type, title, poster, year, status
@@ -181,7 +190,8 @@ app.use((req, res, next) => {
     }
   }
 
-  if (url.includes('/api/dismiss') && req.method === 'POST') {
+  // API: dismiss a recommendation
+  if (url === '/api/dismiss' && req.method === 'POST') {
     const { imdbId } = req.body || {};
     if (!imdbId) return res.status(400).json({ error: 'imdbId required' });
     try {
@@ -192,7 +202,8 @@ app.use((req, res, next) => {
     }
   }
 
-  if (url.includes('/api/recommend/refresh') && req.method === 'POST') {
+  // API: trigger manual recommendation refresh
+  if (url === '/api/recommend/refresh' && req.method === 'POST') {
     console.log('[refresh] Manual refresh triggered via dashboard');
     try {
       recommend.run('default')
@@ -208,8 +219,7 @@ app.use((req, res, next) => {
   next();
 });
 
-app.post('/:secret/mark-watched', (req, res) => {
-  if (req.params.secret !== SECRET) return res.status(404).end();
+app.post(`/${SECRET}/mark-watched`, (req, res) => {
   const { imdbId, type } = req.body || {};
   if (!imdbId || !['movie', 'series'].includes(type)) {
     return res.status(400).json({ error: 'imdbId and type (movie|series) required' });
@@ -232,8 +242,7 @@ app.post('/:secret/mark-watched', (req, res) => {
   }
 });
 
-app.delete('/:secret/mark-watched', (req, res) => {
-  if (req.params.secret !== SECRET) return res.status(404).end();
+app.delete(`/${SECRET}/mark-watched`, (req, res) => {
   const { imdbId } = req.body || {};
   if (!imdbId) return res.status(400).json({ error: 'imdbId required' });
   try {

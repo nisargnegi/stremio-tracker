@@ -1,4 +1,32 @@
-node_modules/
-data/
+# Environment & secrets
 .env
+.env.*
+!.env.example
+*.env
+*.pem
+*.key
+*.crt
+
+# Runtime data & logs
+data/
+*.db
+*.sqlite
+*.sqlite3
 *.log
+logs/
+
+# Dependencies
+node_modules/
+
+# Operating system & IDE files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.suo
+*.ntvsopt
+*.njsproj
+
+# Test & coverage
+coverage/
+

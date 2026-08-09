@@ -18,6 +18,12 @@ services:
       - /tmp
     security_opt:
       - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:7000/health', r => process.exit(r.statusCode === 200 ? 0 : 1))"]
+      interval: 30s
+      timeout: 10s
+      start_period: 20s
+      retries: 3
 
   cron:
     build: .
@@ -43,7 +49,8 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
-      - addon
+      addon:
+        condition: service_healthy
 
   # Keeps your DuckDNS domain pointed at this server's current IP.
   # Needed even on a VPS with a "static" IP, since it can occasionally

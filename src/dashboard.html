@@ -17,6 +17,9 @@
       --text-muted: #8a8d9b;
       --border: #232736;
       --success: #2ed573;
+      --movie-color: #2ed573;
+      --series-color: #7c5cff;
+      --anime-color: #ff4757;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -29,13 +32,13 @@
     }
 
     header {
-      background: rgba(21, 23, 32, 0.8);
+      background: rgba(21, 23, 32, 0.9);
       backdrop-filter: blur(12px);
       border-bottom: 1px solid var(--border);
       position: sticky;
       top: 0;
       z-index: 100;
-      padding: 16px 24px;
+      padding: 14px 24px;
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -62,6 +65,7 @@
       font-size: 16px;
     }
 
+    /* Main nav tabs: Recommendations / History */
     .nav-tabs {
       display: flex;
       background: #0b0c10;
@@ -110,16 +114,61 @@
     .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
     main {
-      max-width: 1300px;
+      max-width: 1400px;
       margin: 24px auto;
       padding: 0 24px;
+    }
+
+    /* Type filter pills: All / Movies / Series / Anime */
+    .filter-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 18px;
+      flex-wrap: wrap;
+    }
+    .filter-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 500;
+      margin-right: 4px;
+    }
+    .filter-pill {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.18s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .filter-pill:hover { border-color: #383e56; color: var(--text); }
+    .filter-pill.active {
+      color: #fff;
+      border-color: transparent;
+    }
+    .filter-pill.active.fp-all    { background: var(--accent); }
+    .filter-pill.active.fp-movie  { background: var(--movie-color); color: #000; }
+    .filter-pill.active.fp-series { background: var(--series-color); }
+    .filter-pill.active.fp-anime  { background: var(--anime-color); }
+
+    .pill-count {
+      background: rgba(255,255,255,0.15);
+      border-radius: 10px;
+      padding: 1px 7px;
+      font-size: 11px;
     }
 
     .toolbar {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 20px;
+      margin-bottom: 16px;
       gap: 16px;
       flex-wrap: wrap;
     }
@@ -139,8 +188,8 @@
 
     .grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-      gap: 20px;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 18px;
     }
 
     .card {
@@ -183,8 +232,6 @@
       position: absolute;
       top: 8px;
       right: 8px;
-      background: rgba(0,0,0,0.75);
-      backdrop-filter: blur(8px);
       color: #fff;
       font-size: 10px;
       font-weight: 700;
@@ -193,19 +240,19 @@
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
-    .badge-anime { background: rgba(255, 71, 87, 0.85); }
-    .badge-movie { background: rgba(46, 213, 115, 0.85); }
-    .badge-series { background: rgba(124, 92, 255, 0.85); }
+    .badge-anime  { background: rgba(255, 71, 87, 0.9); }
+    .badge-movie  { background: rgba(46, 213, 115, 0.9); color: #000; }
+    .badge-series { background: rgba(124, 92, 255, 0.9); }
 
     .card-content {
-      padding: 14px;
+      padding: 12px 14px 14px;
       display: flex;
       flex-direction: column;
       flex: 1;
     }
 
     .card-title {
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 600;
       color: #fff;
       margin-bottom: 6px;
@@ -213,17 +260,17 @@
     }
 
     .card-reason {
-      font-size: 12px;
+      font-size: 11px;
       color: var(--text-muted);
-      line-height: 1.4;
-      margin-bottom: 14px;
+      line-height: 1.45;
+      margin-bottom: 12px;
       flex: 1;
       font-style: italic;
     }
 
     .card-actions {
       display: flex;
-      gap: 8px;
+      gap: 6px;
       margin-top: auto;
     }
 
@@ -237,7 +284,7 @@
       background: #1b1e2b;
       color: var(--text);
       cursor: pointer;
-      transition: all 0.2s;
+      transition: all 0.18s;
     }
     .action-btn:hover { background: #252a3d; }
     .action-btn-watched:hover { background: var(--success); border-color: var(--success); color: #000; }
@@ -260,8 +307,8 @@
     }
 
     .spinner {
-      width: 16px;
-      height: 16px;
+      width: 15px;
+      height: 15px;
       border: 2px solid rgba(255,255,255,0.3);
       border-radius: 50%;
       border-top-color: #fff;
@@ -270,10 +317,15 @@
     @keyframes spin { to { transform: rotate(360deg); } }
 
     .empty-state {
+      grid-column: 1 / -1;
       text-align: center;
       padding: 60px 20px;
       color: var(--text-muted);
     }
+    .empty-state .empty-icon { font-size: 48px; margin-bottom: 12px; }
+    .empty-state .empty-msg { font-size: 14px; }
+
+    .status-text { font-size: 12px; color: var(--text-muted); }
   </style>
 </head>
 <body>
@@ -285,142 +337,205 @@
     </div>
 
     <div class="nav-tabs">
-      <button class="tab-btn active" onclick="switchTab('recs')">💡 Recommendations (<span id="recs-count">0</span>)</button>
-      <button class="tab-btn" onclick="switchTab('history')">📊 History (<span id="history-count">0</span>)</button>
+      <button class="tab-btn active" id="tab-recs" onclick="switchTab('recs', event)">💡 Recommendations (<span id="recs-count">0</span>)</button>
+      <button class="tab-btn" id="tab-history" onclick="switchTab('history', event)">📊 History (<span id="history-count">0</span>)</button>
     </div>
 
     <div class="header-actions">
       <button class="btn" id="refresh-btn" onclick="triggerRefresh()">
-        <span>🔄</span> Refresh Recommendations
+        <span>🔄</span> Refresh
       </button>
     </div>
   </header>
 
   <main>
+    <!-- Type filter pills -->
+    <div class="filter-bar" id="filter-bar">
+      <span class="filter-label">Filter:</span>
+      <button class="filter-pill fp-all active" id="pill-all"    onclick="setFilter('all',    event)">All <span class="pill-count" id="count-all">0</span></button>
+      <button class="filter-pill fp-movie"      id="pill-movie"  onclick="setFilter('movie',  event)">🎬 Movies <span class="pill-count" id="count-movie">0</span></button>
+      <button class="filter-pill fp-series"     id="pill-series" onclick="setFilter('series', event)">📺 Series <span class="pill-count" id="count-series">0</span></button>
+      <button class="filter-pill fp-anime"      id="pill-anime"  onclick="setFilter('anime',  event)">🌸 Anime <span class="pill-count" id="count-anime">0</span></button>
+    </div>
+
     <div class="toolbar">
-      <input type="text" class="search-input" id="search-box" placeholder="Filter by title..." oninput="filterGrid()">
-      <div style="font-size: 12px; color: var(--text-muted);" id="status-info">Dashboard Active</div>
+      <input type="text" class="search-input" id="search-box" placeholder="Filter by title..." oninput="renderGrid()">
+      <div class="status-text" id="status-info">Dashboard Active</div>
     </div>
 
     <div class="grid" id="content-grid"></div>
-    <div class="empty-state" id="empty-state" style="display:none;">No items found.</div>
   </main>
 
   <div class="toast" id="toast"></div>
 
   <script>
+    // ---- Security: extract APP_SECRET from URL path ---
+    // Dashboard is only reachable at /:secret/dashboard, so path[1] is the secret.
     const SECRET = window.location.pathname.split('/')[1];
     const API_BASE = `/${SECRET}/api`;
 
-    let allRecs = [];
+    let allRecs    = [];
     let allHistory = [];
-    let currentTab = 'recs';
+    let currentTab    = 'recs';
+    let currentFilter = 'all'; // 'all' | 'movie' | 'series' | 'anime'
+
+    // ---- Utility: safe HTML escaping (prevents XSS from TMDB titles/reasons) ----
+    function esc(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
 
     function showToast(msg) {
       const toast = document.getElementById('toast');
-      toast.innerText = msg;
+      toast.textContent = msg;
       toast.style.display = 'block';
-      setTimeout(() => { toast.style.display = 'none'; }, 3000);
+      clearTimeout(toast._timer);
+      toast._timer = setTimeout(() => { toast.style.display = 'none'; }, 3200);
     }
 
+    // ---- Data loading ----
     async function loadData() {
       try {
         const [recsRes, historyRes] = await Promise.all([
           fetch(`${API_BASE}/recommendations`),
-          fetch(`${API_BASE}/history`)
+          fetch(`${API_BASE}/history`),
         ]);
 
-        allRecs = await recsRes.json();
+        allRecs    = await recsRes.json();
         allHistory = await historyRes.json();
 
-        document.getElementById('recs-count').innerText = allRecs.length;
-        document.getElementById('history-count').innerText = allHistory.length;
+        document.getElementById('recs-count').textContent    = allRecs.length;
+        document.getElementById('history-count').textContent = allHistory.length;
 
+        updatePillCounts();
         renderGrid();
       } catch (err) {
         showToast('Failed to load data: ' + err.message);
       }
     }
 
-    function switchTab(tab) {
+    // ---- Tab switching ----
+    function switchTab(tab, e) {
       currentTab = tab;
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-      event.target.classList.add('active');
+      if (e && e.target) e.target.classList.add('active');
+      updatePillCounts();
       renderGrid();
     }
 
-    function filterGrid() {
+    // ---- Type filter pills ----
+    function setFilter(filter, e) {
+      currentFilter = filter;
+      document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+      if (e && e.target) e.target.classList.add('active');
       renderGrid();
     }
 
+    function categorise(item) {
+      if (item.is_anime === 1) return 'anime';
+      return item.type === 'movie' ? 'movie' : 'series';
+    }
+
+    function updatePillCounts() {
+      const items = currentTab === 'recs' ? allRecs : allHistory;
+      const counts = { all: items.length, movie: 0, series: 0, anime: 0 };
+      for (const item of items) counts[categorise(item)]++;
+      document.getElementById('count-all').textContent    = counts.all;
+      document.getElementById('count-movie').textContent  = counts.movie;
+      document.getElementById('count-series').textContent = counts.series;
+      document.getElementById('count-anime').textContent  = counts.anime;
+    }
+
+    // ---- Grid rendering ----
     function renderGrid() {
       const query = document.getElementById('search-box').value.toLowerCase();
-      const grid = document.getElementById('content-grid');
-      const empty = document.getElementById('empty-state');
-
+      const grid  = document.getElementById('content-grid');
       grid.innerHTML = '';
 
       let items = currentTab === 'recs' ? allRecs : allHistory;
-      items = items.filter(i => (i.title || i.imdb_id).toLowerCase().includes(query));
+
+      // Apply type filter
+      if (currentFilter !== 'all') {
+        items = items.filter(i => categorise(i) === currentFilter);
+      }
+
+      // Apply search
+      if (query) {
+        items = items.filter(i => (i.title || i.imdb_id).toLowerCase().includes(query));
+      }
 
       if (items.length === 0) {
-        empty.style.display = 'block';
+        grid.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">🔍</div>
+            <div class="empty-msg">No items found for this filter.</div>
+          </div>`;
         return;
       }
-      empty.style.display = 'none';
 
-      items.forEach(item => {
+      document.getElementById('status-info').textContent = `Showing ${items.length} item${items.length !== 1 ? 's' : ''}`;
+
+      for (const item of items) {
+        const cat = categorise(item);
+        const badgeClass = cat === 'anime' ? 'badge-anime' : (cat === 'movie' ? 'badge-movie' : 'badge-series');
+        const badgeLabel = cat === 'anime' ? 'Anime' : (cat === 'movie' ? 'Movie' : 'Series');
+
         const card = document.createElement('div');
         card.className = 'card';
         card.id = `card-${item.imdb_id}`;
 
-        const isAnime = item.is_anime === 1;
-        const badgeClass = isAnime ? 'badge-anime' : (item.type === 'movie' ? 'badge-movie' : 'badge-series');
-        const badgeLabel = isAnime ? 'Anime' : item.type;
+        const posterHtml = item.poster
+          ? `<img class="poster-img" src="${esc(item.poster)}" alt="${esc(item.title)}" loading="lazy">`
+          : `<div class="poster-fallback">🎬</div>`;
+
+        const actionsHtml = currentTab === 'recs'
+          ? `<button class="action-btn action-btn-watched" onclick="markWatched('${esc(item.imdb_id)}', '${esc(item.type)}')">✓ Watched</button>
+             <button class="action-btn action-btn-dismiss" onclick="dismissRec('${esc(item.imdb_id)}')">✕ Hide</button>`
+          : `<button class="action-btn action-btn-dismiss" onclick="removeHistory('${esc(item.imdb_id)}')">Remove</button>`;
+
+        const reasonHtml = currentTab === 'recs'
+          ? `<div class="card-reason">${esc(item.reason) || 'Recommended based on your watch history'}</div>`
+          : '';
 
         card.innerHTML = `
           <div class="poster-wrapper">
-            ${item.poster
-              ? `<img class="poster-img" src="${item.poster}" alt="${item.title}" loading="lazy">`
-              : `<div class="poster-fallback">🎬</div>`
-            }
+            ${posterHtml}
             <div class="badge ${badgeClass}">${badgeLabel}</div>
           </div>
           <div class="card-content">
-            <div class="card-title">${item.title || item.imdb_id}</div>
-            ${currentTab === 'recs' ? `<div class="card-reason">${item.reason || 'Recommended based on watch history'}</div>` : ''}
-            <div class="card-actions">
-              ${currentTab === 'recs' ? `
-                <button class="action-btn action-btn-watched" onclick="markWatched('${item.imdb_id}', '${item.type}')">✓ Watched</button>
-                <button class="action-btn action-btn-dismiss" onclick="dismissRec('${item.imdb_id}')">✕ Hide</button>
-              ` : `
-                <button class="action-btn action-btn-dismiss" onclick="removeHistory('${item.imdb_id}')">Remove</button>
-              `}
-            </div>
-          </div>
-        `;
+            <div class="card-title">${esc(item.title) || item.imdb_id}</div>
+            ${reasonHtml}
+            <div class="card-actions">${actionsHtml}</div>
+          </div>`;
+
         grid.appendChild(card);
-      });
+      }
     }
 
+    // ---- Actions ----
     async function markWatched(imdbId, type) {
       document.getElementById(`card-${imdbId}`)?.remove();
       showToast('Marked as watched!');
       await fetch(`/${SECRET}/mark-watched`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imdbId, type })
+        body: JSON.stringify({ imdbId, type }),
       });
       loadData();
     }
 
     async function dismissRec(imdbId) {
       document.getElementById(`card-${imdbId}`)?.remove();
-      showToast('Dismissed recommendation');
+      showToast('Recommendation hidden');
       await fetch(`${API_BASE}/dismiss`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imdbId })
+        body: JSON.stringify({ imdbId }),
       });
       loadData();
     }
@@ -431,7 +546,7 @@
       await fetch(`/${SECRET}/mark-watched`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imdbId })
+        body: JSON.stringify({ imdbId }),
       });
       loadData();
     }
@@ -439,23 +554,23 @@
     async function triggerRefresh() {
       const btn = document.getElementById('refresh-btn');
       btn.disabled = true;
-      btn.innerHTML = `<div class="spinner"></div> Generating recommendations...`;
+      btn.innerHTML = `<div class="spinner"></div> Generating...`;
 
       try {
-        const res = await fetch(`${API_BASE}/recommend/refresh`, { method: 'POST' });
+        const res  = await fetch(`${API_BASE}/recommend/refresh`, { method: 'POST' });
         const data = await res.json();
-        showToast('AI & TMDB generating new titles...');
-        await new Promise(resolve => setTimeout(resolve, 2500));
-        await loadData();
-        showToast('Fresh recommendations loaded!');
+        showToast(data.message || 'Refresh triggered! Results appear in ~30s.');
+        // Wait a bit then reload — the refresh runs async server-side
+        setTimeout(loadData, 5000);
       } catch (err) {
         showToast('Refresh failed: ' + err.message);
       } finally {
         btn.disabled = false;
-        btn.innerHTML = `<span>🔄</span> Refresh Recommendations`;
+        btn.innerHTML = `<span>🔄</span> Refresh`;
       }
     }
 
+    // ---- Boot ----
     loadData();
   </script>
 </body>
