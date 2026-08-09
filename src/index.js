@@ -134,15 +134,24 @@ app.use(rateLimit({ windowMs: 60 * 1000, max: 120 }));
 
 app.use(express.json());
 
+app.use(express.json());
+
 // ---- Web Dashboard & Manual API Routes ----
 
 // Serve Dashboard HTML
-app.get(`/${SECRET}/dashboard`, (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
+app.get('/:secret/dashboard', (req, res) => {
+  if (req.params.secret !== SECRET) return res.status(404).end();
+  const filePath = path.join(__dirname, 'public', 'dashboard.html');
+  res.sendFile(filePath, (err) => {
+    if (err && !res.headersSent) {
+      res.status(500).send(`Dashboard file load error: ${err.message}`);
+    }
+  });
 });
 
 // API: Get active recommendations
-app.get(`/${SECRET}/api/recommendations`, (req, res) => {
+app.get('/:secret/api/recommendations', (req, res) => {
+  if (req.params.secret !== SECRET) return res.status(404).end();
   try {
     const rows = db.prepare(`
       SELECT imdb_id, type, title, poster, is_anime, score, reason, updated_at
@@ -157,7 +166,8 @@ app.get(`/${SECRET}/api/recommendations`, (req, res) => {
 });
 
 // API: Get watch history
-app.get(`/${SECRET}/api/history`, (req, res) => {
+app.get('/:secret/api/history', (req, res) => {
+  if (req.params.secret !== SECRET) return res.status(404).end();
   try {
     const rows = db.prepare(`
       SELECT imdb_id, type, title, poster, year, status
@@ -172,7 +182,8 @@ app.get(`/${SECRET}/api/history`, (req, res) => {
 });
 
 // API: Dismiss a recommendation without watching
-app.post(`/${SECRET}/api/dismiss`, (req, res) => {
+app.post('/:secret/api/dismiss', (req, res) => {
+  if (req.params.secret !== SECRET) return res.status(404).end();
   const { imdbId } = req.body || {};
   if (!imdbId) return res.status(400).json({ error: 'imdbId required' });
   try {
@@ -184,7 +195,8 @@ app.post(`/${SECRET}/api/dismiss`, (req, res) => {
 });
 
 // API: Manually trigger recommendation refresh
-app.post(`/${SECRET}/api/recommend/refresh`, async (req, res) => {
+app.post('/:secret/api/recommend/refresh', async (req, res) => {
+  if (req.params.secret !== SECRET) return res.status(404).end();
   try {
     recommend.run('default')
       .then(() => console.log('[dashboard] Manual recommendation refresh complete.'))
@@ -195,7 +207,8 @@ app.post(`/${SECRET}/api/recommend/refresh`, async (req, res) => {
   }
 });
 
-app.post(`/${SECRET}/mark-watched`, (req, res) => {
+app.post('/:secret/mark-watched', (req, res) => {
+  if (req.params.secret !== SECRET) return res.status(404).end();
   const { imdbId, type } = req.body || {};
   if (!imdbId || !['movie', 'series'].includes(type)) {
     return res.status(400).json({ error: 'imdbId and type (movie|series) required' });
@@ -218,7 +231,8 @@ app.post(`/${SECRET}/mark-watched`, (req, res) => {
   }
 });
 
-app.delete(`/${SECRET}/mark-watched`, (req, res) => {
+app.delete('/:secret/mark-watched', (req, res) => {
+  if (req.params.secret !== SECRET) return res.status(404).end();
   const { imdbId } = req.body || {};
   if (!imdbId) return res.status(400).json({ error: 'imdbId required' });
   try {
