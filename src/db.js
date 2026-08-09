@@ -29,6 +29,7 @@ function init() {
       tmdb_id INTEGER,
       title TEXT,
       year INTEGER,
+      poster TEXT,
       status TEXT DEFAULT 'watching',  -- 'watching' | 'completed' | 'dropped'
       PRIMARY KEY (imdb_id, user_id)
     );
@@ -74,6 +75,7 @@ function init() {
       imdb_id TEXT NOT NULL,
       type TEXT NOT NULL,
       title TEXT,
+      poster TEXT,
       score REAL DEFAULT 0,
       reason TEXT,
       updated_at TEXT DEFAULT (datetime('now')),

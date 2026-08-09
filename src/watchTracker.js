@@ -13,7 +13,29 @@
 //
 // Nothing here requires the user to press a button.
 
+const { findByImdbId } = require('./tmdb');
 const TIMEOUT_HOURS = parseInt(process.env.WATCH_TIMEOUT_HOURS || '3', 10);
+
+// Fire-and-forget: fetch title/year/tmdbId from TMDB and store them.
+// Called when we first see a new imdb_id so catalogs show real names + posters.
+function enrichItemFromTmdb(db, { imdbId, type, userId }) {
+  findByImdbId(imdbId)
+    .then((result) => {
+      const info = type === 'series' ? result.tv : result.movie;
+      if (!info) return;
+      const title = info.name || info.title || null;
+      const year = parseInt((info.first_air_date || info.release_date || '').slice(0, 4)) || null;
+      const tmdbId = info.id || null;
+      const poster = info.poster_path
+        ? `https://image.tmdb.org/t/p/w300${info.poster_path}`
+        : null;
+      db.prepare(`
+        UPDATE items SET title = ?, year = ?, tmdb_id = ?, poster = ?
+        WHERE imdb_id = ? AND user_id = ? AND (title IS NULL OR title = '')
+      `).run(title, year, tmdbId, poster, imdbId, userId);
+    })
+    .catch(() => {}); // never let a TMDB error break tracking
+}
 
 function logStreamRequest(db, { userId = 'default', imdbId, type, season, episode }) {
   db.prepare(`
@@ -21,11 +43,20 @@ function logStreamRequest(db, { userId = 'default', imdbId, type, season, episod
     VALUES (?, ?, ?, ?, ?)
   `).run(userId, imdbId, type, season ?? null, episode ?? null);
 
-  db.prepare(`
+  const itemResult = db.prepare(`
     INSERT INTO items (imdb_id, user_id, type, status)
     VALUES (?, ?, ?, 'watching')
     ON CONFLICT(imdb_id, user_id) DO NOTHING
   `).run(imdbId, userId, type);
+
+  // If this is the first time we've seen this item, fetch its metadata from TMDB.
+  if (itemResult.changes > 0) {
+    enrichItemFromTmdb(db, { imdbId, type, userId });
+  } else {
+    // Also enrich if title is still missing (e.g. previous TMDB call failed).
+    const row = db.prepare('SELECT title FROM items WHERE imdb_id = ? AND user_id = ?').get(imdbId, userId);
+    if (!row?.title) enrichItemFromTmdb(db, { imdbId, type, userId });
+  }
 
   if (type === 'series' && season != null && episode != null) {
     autoAdvance(db, { userId, imdbId, season, episode });

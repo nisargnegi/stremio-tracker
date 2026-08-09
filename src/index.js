@@ -57,7 +57,7 @@ builder.defineStreamHandler(({ type, id }) => {
 builder.defineCatalogHandler(({ type, id }) => {
   if (id === 'tracker-continue' && type === 'series') {
     const rows = db.prepare(`
-      SELECT DISTINCT imdb_id, title FROM items
+      SELECT DISTINCT imdb_id, title, poster FROM items
       WHERE type = 'series' AND status = 'watching'
       ORDER BY imdb_id
     `).all();
@@ -67,22 +67,21 @@ builder.defineCatalogHandler(({ type, id }) => {
         id: r.imdb_id,
         type: 'series',
         name: r.title || r.imdb_id,
+        poster: r.poster || undefined,
       })),
     });
   }
 
   if (id === 'tracker-recommended') {
-    // Populated by the recommendations cron (see recommend.js) into a cache
-    // table — kept out of the hot path here since it calls TMDB/DeepSeek.
     const rows = db.prepare(`
-      SELECT imdb_id, title FROM recommendations_cache
+      SELECT imdb_id, title, poster FROM recommendations_cache
       WHERE type = ?
       ORDER BY score DESC
       LIMIT 25
     `).all(type);
 
     return Promise.resolve({
-      metas: rows.map((r) => ({ id: r.imdb_id, type, name: r.title || r.imdb_id })),
+      metas: rows.map((r) => ({ id: r.imdb_id, type, name: r.title || r.imdb_id, poster: r.poster || undefined })),
     });
   }
 
