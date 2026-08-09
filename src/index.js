@@ -141,7 +141,7 @@ app.use(express.json());
 app.use((req, res, next) => {
   const url = req.url || '';
 
-  if (url.endsWith('/dashboard')) {
+  if (url.includes('dashboard')) {
     try {
       const html = fs.readFileSync(path.join(__dirname, 'dashboard.html'), 'utf8');
       res.setHeader('Content-Type', 'text/html');
