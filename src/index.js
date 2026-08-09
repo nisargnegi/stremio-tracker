@@ -125,7 +125,7 @@ if (!SECRET || SECRET === INSECURE_DEFAULT) {
 }
 
 const app = express();
-app.use(helmet());
+app.use(helmet({ contentSecurityPolicy: false }));
 app.disable('x-powered-by');
 
 // 120 requests/minute is generous for one person's Stremio client but
@@ -178,7 +178,69 @@ app.delete(`/${SECRET}/mark-watched`, (req, res) => {
   if (!imdbId) return res.status(400).json({ error: 'imdbId required' });
   try {
     db.prepare(`DELETE FROM watched WHERE imdb_id = ? AND user_id = 'default'`).run(imdbId);
+    db.prepare(`DELETE FROM items WHERE imdb_id = ? AND user_id = 'default'`).run(imdbId);
     res.json({ ok: true, message: `${imdbId} removed from watched` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---- Web Dashboard Routes ----
+
+// Serve Dashboard HTML
+app.get(`/${SECRET}/dashboard`, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
+});
+
+// API: Get active recommendations
+app.get(`/${SECRET}/api/recommendations`, (req, res) => {
+  try {
+    const rows = db.prepare(`
+      SELECT imdb_id, type, title, poster, is_anime, score, reason, updated_at
+      FROM recommendations_cache
+      WHERE user_id = 'default'
+      ORDER BY score DESC
+    `).all();
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// API: Get watch history
+app.get(`/${SECRET}/api/history`, (req, res) => {
+  try {
+    const rows = db.prepare(`
+      SELECT imdb_id, type, title, poster, year, status
+      FROM items
+      WHERE user_id = 'default'
+      ORDER BY id DESC
+    `).all();
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// API: Dismiss a recommendation without watching
+app.post(`/${SECRET}/api/dismiss`, (req, res) => {
+  const { imdbId } = req.body || {};
+  if (!imdbId) return res.status(400).json({ error: 'imdbId required' });
+  try {
+    db.prepare(`DELETE FROM recommendations_cache WHERE imdb_id = ? AND user_id = 'default'`).run(imdbId);
+    res.json({ ok: true, message: `${imdbId} dismissed` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// API: Manually trigger recommendation refresh
+app.post(`/${SECRET}/api/recommend/refresh`, async (req, res) => {
+  try {
+    recommend.run('default')
+      .then(() => console.log('[dashboard] Manual recommendation refresh complete.'))
+      .catch((err) => console.error('[dashboard] Recommendation refresh failed:', err));
+    res.json({ ok: true, message: 'Recommendation refresh triggered in background!' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
