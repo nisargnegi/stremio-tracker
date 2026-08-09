@@ -243,14 +243,14 @@ async function rankWithDeepSeek(candidates, seedTitles) {
   const top = [...candidates]
     .filter((c) => c.voteCount >= 100 && c.popularity >= 15)
     .sort((a, b) => b.popularity - a.popularity)
-    .slice(0, 100);
+    .slice(0, 250);
 
   const prompt = `Movie & TV recommendation engine. User enjoyed: ${seedTitles.join(', ')}.
 
 Candidates (title | type):
 ${top.map((c) => `${c.title} | ${c.type}`).join('\n')}
 
-Return JSON array of top 60: [{"title":"...","type":"movie|series","reason":"one short sentence"}]. JSON only.`;
+Return JSON array of top 120: [{"title":"...","type":"movie|series","reason":"one short sentence"}]. JSON only.`;
 
   try {
     const res = await fetch('https://api.deepseek.com/chat/completions', {
@@ -259,7 +259,7 @@ Return JSON array of top 60: [{"title":"...","type":"movie|series","reason":"one
       body: JSON.stringify({
         model: 'deepseek-chat',
         messages: [{ role: 'user', content: prompt }],
-        max_tokens: 4000,
+        max_tokens: 8000,
       }),
     });
     const data = await res.json();
