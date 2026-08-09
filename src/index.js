@@ -10,6 +10,7 @@
 
 require('dotenv').config();
 const fs = require('fs');
+const path = require('path');
 const express = require('express');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
