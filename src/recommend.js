@@ -30,26 +30,31 @@ async function gatherCandidates(db, userId) {
   `).all(userId, type);
 
   const seeds = [...getSeeds('movie'), ...getSeeds('series')];
-
   const candidates = new Map();
-  for (const seed of seeds) {
-    try {
-      const recs = await tmdb.getRecommendations(seed.tmdb_id, seed.type);
-      for (const r of recs.slice(0, 15)) {
-        if (!candidates.has(r.id)) {
-          candidates.set(r.id, {
-            tmdbId: r.id,
-            type: seed.type,
-            title: r.title || r.name,
-            poster: r.poster_path ? `https://image.tmdb.org/t/p/w300${r.poster_path}` : null,
-            isAnime: seed.type === 'series' ? detectAnime(r) : false,
-            basedOn: seed.title,
-          });
+
+  // Fetch TMDB recommendations in parallel batches of 10
+  const BATCH_SIZE = 10;
+  for (let i = 0; i < seeds.length; i += BATCH_SIZE) {
+    const batch = seeds.slice(i, i + BATCH_SIZE);
+    await Promise.all(batch.map(async (seed) => {
+      try {
+        const recs = await tmdb.getRecommendations(seed.tmdb_id, seed.type);
+        for (const r of recs.slice(0, 15)) {
+          if (!candidates.has(r.id)) {
+            candidates.set(r.id, {
+              tmdbId: r.id,
+              type: seed.type,
+              title: r.title || r.name,
+              poster: r.poster_path ? `https://image.tmdb.org/t/p/w300${r.poster_path}` : null,
+              isAnime: seed.type === 'series' ? detectAnime(r) : false,
+              basedOn: seed.title,
+            });
+          }
         }
+      } catch (err) {
+        console.error(`[recommend] TMDB lookup failed for ${seed.title}:`, err.message);
       }
-    } catch (err) {
-      console.error(`[recommend] TMDB lookup failed for ${seed.title}:`, err.message);
-    }
+    }));
   }
   return [...candidates.values()];
 }
@@ -156,28 +161,33 @@ async function run(userId = 'default') {
 
   db.prepare(`DELETE FROM recommendations_cache WHERE user_id = ?`).run(userId);
 
+  // Resolve TMDB details in parallel batches of 15
   let cached = 0;
-  for (const c of toCache) {
-    try {
-      const details = c.type === 'movie'
-        ? await tmdb.getMovieDetails(c.tmdbId)
-        : await tmdb.getShowDetails(c.tmdbId);
-      const imdbId = details.external_ids?.imdb_id || details.imdb_id;
-      if (!imdbId || alreadyOwned.has(imdbId)) continue;
+  const DETAIL_BATCH_SIZE = 15;
+  for (let i = 0; i < toCache.length; i += DETAIL_BATCH_SIZE) {
+    const batch = toCache.slice(i, i + DETAIL_BATCH_SIZE);
+    await Promise.all(batch.map(async (c) => {
+      try {
+        const details = c.type === 'movie'
+          ? await tmdb.getMovieDetails(c.tmdbId)
+          : await tmdb.getShowDetails(c.tmdbId);
+        const imdbId = details.external_ids?.imdb_id || details.imdb_id;
+        if (!imdbId || alreadyOwned.has(imdbId)) return;
 
-      const poster = c.poster
-        || (details.poster_path ? `https://image.tmdb.org/t/p/w300${details.poster_path}` : null);
+        const poster = c.poster
+          || (details.poster_path ? `https://image.tmdb.org/t/p/w300${details.poster_path}` : null);
 
-      const genreIds = details.genres?.map((g) => g.id) || [];
-      const isAnime = c.isAnime ||
-        (genreIds.includes(16) && (details.original_language === 'ja' ||
-          (Array.isArray(details.origin_country) && details.origin_country.includes('JP'))));
+        const genreIds = details.genres?.map((g) => g.id) || [];
+        const isAnime = c.isAnime ||
+          (genreIds.includes(16) && (details.original_language === 'ja' ||
+            (Array.isArray(details.origin_country) && details.origin_country.includes('JP'))));
 
-      upsert.run(userId, imdbId, c.type, c.title, poster, isAnime ? 1 : 0, c.score || 0, c.reason || '');
-      cached++;
-    } catch (err) {
-      console.error(`[recommend] failed resolving imdb id for ${c.title}:`, err.message);
-    }
+        upsert.run(userId, imdbId, c.type, c.title, poster, isAnime ? 1 : 0, c.score || 0, c.reason || '');
+        cached++;
+      } catch (err) {
+        console.error(`[recommend] failed resolving imdb id for ${c.title}:`, err.message);
+      }
+    }));
   }
 
   console.log(`Cached ${cached} recommendations for ${userId} (${aiRanked.length} AI-ranked + ${Math.max(0, cached - aiRanked.length)} TMDB fallback).`);

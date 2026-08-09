@@ -444,8 +444,10 @@
       try {
         const res = await fetch(`${API_BASE}/recommend/refresh`, { method: 'POST' });
         const data = await res.json();
-        showToast(data.message || 'Recommendations refreshed!');
+        showToast('AI & TMDB generating new titles...');
+        await new Promise(resolve => setTimeout(resolve, 2500));
         await loadData();
+        showToast('Fresh recommendations loaded!');
       } catch (err) {
         showToast('Refresh failed: ' + err.message);
       } finally {
