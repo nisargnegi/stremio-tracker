@@ -25,7 +25,7 @@ async function gatherCandidates(db, userId) {
     FROM items i
     LEFT JOIN ratings r ON r.imdb_id = i.imdb_id AND r.user_id = i.user_id
     WHERE i.user_id = ? AND i.tmdb_id IS NOT NULL AND i.type = ?
-    ORDER BY COALESCE(r.rating, 0) DESC
+    ORDER BY COALESCE(r.rating, 0) DESC, RANDOM()
     LIMIT 20
   `).all(userId, type);
 
@@ -169,7 +169,7 @@ async function run(userId = 'default') {
   const db = init();
 
   const seedTitles = db.prepare(`
-    SELECT title FROM items WHERE user_id = ? AND title IS NOT NULL LIMIT 25
+    SELECT title FROM items WHERE user_id = ? AND title IS NOT NULL ORDER BY RANDOM() LIMIT 25
   `).all(userId).map((r) => r.title);
 
   console.log(`[recommend] Seeds (${seedTitles.length}):`, seedTitles.slice(0, 5).join(', '));
