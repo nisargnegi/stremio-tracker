@@ -49,6 +49,9 @@ function logStreamRequest(db, { userId = 'default', imdbId, type, season, episod
     ON CONFLICT(imdb_id, user_id) DO NOTHING
   `).run(imdbId, userId, type);
 
+  // Instantly remove from recommendations cache so it disappears live from Stremio catalogs
+  db.prepare('DELETE FROM recommendations_cache WHERE imdb_id = ? AND user_id = ?').run(imdbId, userId);
+
   // If this is the first time we've seen this item, fetch its metadata from TMDB.
   if (itemResult.changes > 0) {
     enrichItemFromTmdb(db, { imdbId, type, userId });
