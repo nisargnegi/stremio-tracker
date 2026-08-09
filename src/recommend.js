@@ -165,24 +165,34 @@ async function rankCandidates(candidates, seedTitles) {
 }
 
 async function run(userId = 'default') {
+  console.log(`[recommend] Starting run for userId="${userId}"`);
   const db = init();
 
   const seedTitles = db.prepare(`
     SELECT title FROM items WHERE user_id = ? AND title IS NOT NULL LIMIT 25
   `).all(userId).map((r) => r.title);
 
+  console.log(`[recommend] Seeds (${seedTitles.length}):`, seedTitles.slice(0, 5).join(', '));
+
   const alreadyOwned = new Set(
     db.prepare('SELECT imdb_id FROM items WHERE user_id = ?').all(userId).map((r) => r.imdb_id)
   );
 
+  console.log(`[recommend] Already owned: ${alreadyOwned.size} items`);
+
   const allCandidates = await gatherCandidates(db, userId);
+  console.log(`[recommend] Candidate pool size: ${allCandidates.length}`);
+
   const aiRanked = await rankCandidates(allCandidates, seedTitles);
+  console.log(`[recommend] AI ranked: ${aiRanked.length} items`);
+
   const aiIds = new Set(aiRanked.map((c) => c.tmdbId));
   const tmdbFallback = allCandidates
     .filter((c) => !aiIds.has(c.tmdbId))
     .map((c, i) => ({ ...c, score: -(i + 1) }));
 
   const toCache = [...aiRanked, ...tmdbFallback].slice(0, 200);
+  console.log(`[recommend] Total to cache: ${toCache.length}`);
 
   const upsert = db.prepare(`
     INSERT INTO recommendations_cache (user_id, imdb_id, type, title, poster, is_anime, score, reason)

@@ -193,12 +193,14 @@ app.use((req, res, next) => {
   }
 
   if (url.includes('/api/recommend/refresh') && req.method === 'POST') {
+    console.log('[refresh] Manual refresh triggered via dashboard');
     try {
       recommend.run('default')
-        .then(() => console.log('[dashboard] Manual recommendation refresh complete.'))
-        .catch((err) => console.error('[dashboard] Recommendation refresh failed:', err));
-      return res.json({ ok: true, message: 'Recommendation refresh triggered in background!' });
+        .then(() => console.log('[refresh] ✓ Recommendation refresh complete.'))
+        .catch((err) => console.error('[refresh] ✗ Recommendation refresh FAILED:', err.message, err.stack));
+      return res.json({ ok: true, message: 'Recommendation refresh triggered!' });
     } catch (err) {
+      console.error('[refresh] Sync error:', err.message);
       return res.status(500).json({ error: err.message });
     }
   }
