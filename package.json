@@ -1,0 +1,26 @@
+{
+  "name": "stremio-tracker",
+  "version": "0.1.0",
+  "description": "Self-hosted watch tracker + Stremio addon. Replaces Trakt: tracks what you watch automatically, alerts you on new episodes, and recommends what to watch next.",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/index.js",
+    "cron": "node src/cron.js",
+    "import-trakt": "node src/importTrakt.js"
+  },
+  "dependencies": {
+    "stremio-addon-sdk": "^1.6.10",
+    "better-sqlite3": "^11.3.0",
+    "node-fetch": "^2.7.0",
+    "dotenv": "^16.4.5",
+    "node-cron": "^3.0.3",
+    "express": "^4.19.2",
+    "helmet": "^7.1.0",
+    "express-rate-limit": "^7.4.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,23 @@
+# Caddy automatically gets and renews a free Let's Encrypt HTTPS
+# certificate for your DuckDNS domain — no manual cert management.
+#
+# {$DUCKDNS_DOMAIN} is filled in from the DUCKDNS_DOMAIN value in .env
+# (e.g. "yourname.duckdns.org").
+
+{$DUCKDNS_DOMAIN} {
+    # Forward everything to the addon container, over the private
+    # Docker network — "addon" resolves via Docker's internal DNS.
+    reverse_proxy addon:7000
+
+    # Basic hardening headers on top of what the app already sets.
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "no-referrer"
+    }
+
+    # Keep access logs so you can see who's hitting the server if needed.
+    log {
+        output file /data/access.log
+    }
+}

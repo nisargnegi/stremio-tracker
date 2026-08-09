@@ -1,0 +1,61 @@
+services:
+  addon:
+    build: .
+    restart: unless-stopped
+    # Deliberately NOT exposed to the host/internet — only reachable by
+    # other containers on this same Docker network (i.e. Caddy). This is
+    # what makes the app-level secret path a real second layer, not just
+    # security theater.
+    expose:
+      - "7000"
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+    # Read-only root filesystem + no new privileges: limits what an attacker
+    # could do even if they somehow got code execution in this container.
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+
+  cron:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+    entrypoint: >
+      sh -c "while true; do node src/cron.js; node src/recommend.js; sleep 21600; done"
+    # runs every 6 hours: checks new episodes, sweeps stale watches, refreshes recs
+    security_opt:
+      - no-new-privileges:true
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"    # required for Let's Encrypt certificate validation
+      - "443:443"  # HTTPS — this is the only port Stremio actually talks to
+    env_file: .env
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - addon
+
+  # Keeps your DuckDNS domain pointed at this server's current IP.
+  # Needed even on a VPS with a "static" IP, since it can occasionally
+  # change on reboot depending on your provider.
+  duckdns:
+    image: linuxserver/duckdns:latest
+    restart: unless-stopped
+    environment:
+      - SUBDOMAINS=${DUCKDNS_SUBDOMAIN}
+      - TOKEN=${DUCKDNS_TOKEN}
+      - LOG_FILE=false
+
+volumes:
+  caddy_data:
+  caddy_config:
