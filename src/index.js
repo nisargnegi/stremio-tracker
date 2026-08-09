@@ -125,14 +125,13 @@ if (!SECRET || SECRET === INSECURE_DEFAULT) {
 }
 
 const app = express();
+app.set('trust proxy', 1);
 app.use(helmet({ contentSecurityPolicy: false }));
 app.disable('x-powered-by');
 
 // 120 requests/minute is generous for one person's Stremio client but
 // blunts casual scanning/abuse if the secret ever leaks.
 app.use(rateLimit({ windowMs: 60 * 1000, max: 120 }));
-
-app.use(express.json());
 
 app.use(express.json());
 
