@@ -61,6 +61,34 @@ async function gatherCandidates(db, userId) {
       }
     }));
   }
+
+  // Top up with Trending & Top Rated items if candidate pool is under 200
+  if (candidates.size < 200) {
+    try {
+      const [trendMovie, trendTv, topMovie, topTv] = await Promise.all([
+        tmdb.getTrending('movie'),
+        tmdb.getTrending('series'),
+        tmdb.getTopRated('movie'),
+        tmdb.getTopRated('series'),
+      ]);
+      for (const r of [...trendMovie, ...trendTv, ...topMovie, ...topTv]) {
+        if (!candidates.has(r.id)) {
+          const isMovie = !!r.title;
+          candidates.set(r.id, {
+            tmdbId: r.id,
+            type: isMovie ? 'movie' : 'series',
+            title: r.title || r.name,
+            poster: r.poster_path ? `https://image.tmdb.org/t/p/w300${r.poster_path}` : null,
+            isAnime: !isMovie ? detectAnime(r) : false,
+            basedOn: 'Trending & Popular',
+          });
+        }
+      }
+    } catch (err) {
+      console.error('[recommend] Trending fallback failed:', err.message);
+    }
+  }
+
   return [...candidates.values()];
 }
 

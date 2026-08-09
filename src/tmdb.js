@@ -43,11 +43,17 @@ async function getRecommendations(tmdbId, type, page = 1) {
   return data.results || [];
 }
 
-async function getSimilar(tmdbId, type) {
+async function getTrending(type) {
   const kind = type === 'movie' ? 'movie' : 'tv';
-  const data = await tmdbGet(`/${kind}/${tmdbId}/similar`);
+  const data = await tmdbGet(`/trending/${kind}/week`);
   return data.results || [];
 }
 
-module.exports = { findByImdbId, getShowDetails, getMovieDetails, getRecommendations, getSimilar };
+async function getTopRated(type) {
+  const kind = type === 'movie' ? 'movie' : 'tv';
+  const data = await tmdbGet(`/${kind}/top_rated`);
+  return data.results || [];
+}
+
+module.exports = { findByImdbId, getShowDetails, getMovieDetails, getRecommendations, getSimilar, getTrending, getTopRated };
 
