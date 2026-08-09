@@ -135,75 +135,66 @@ app.use(rateLimit({ windowMs: 60 * 1000, max: 120 }));
 
 app.use(express.json());
 
-// ---- Web Dashboard & Manual API Routes ----
+// ---- Web Dashboard & API Middleware ----
 
-// Serve Dashboard HTML
-app.get('/:secret/dashboard', (req, res) => {
-  const filePath = path.join(__dirname, 'dashboard.html');
-  res.sendFile(filePath, (err) => {
-    if (err && !res.headersSent) {
-      console.error('[dashboard error]', err);
-      res.status(500).send(`Dashboard load error: ${err.message}`);
+app.use((req, res, next) => {
+  const url = req.url || '';
+
+  if (url.endsWith('/dashboard')) {
+    return res.sendFile(path.join(__dirname, 'dashboard.html'));
+  }
+
+  if (url.includes('/api/recommendations')) {
+    try {
+      const rows = db.prepare(`
+        SELECT imdb_id, type, title, poster, is_anime, score, reason, updated_at
+        FROM recommendations_cache
+        WHERE user_id = 'default'
+        ORDER BY score DESC
+      `).all();
+      return res.json(rows);
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
     }
-  });
-});
-
-// API: Get active recommendations
-app.get('/:secret/api/recommendations', (req, res) => {
-  if (req.params.secret !== SECRET) return res.status(404).end();
-  try {
-    const rows = db.prepare(`
-      SELECT imdb_id, type, title, poster, is_anime, score, reason, updated_at
-      FROM recommendations_cache
-      WHERE user_id = 'default'
-      ORDER BY score DESC
-    `).all();
-    res.json(rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
   }
-});
 
-// API: Get watch history
-app.get('/:secret/api/history', (req, res) => {
-  if (req.params.secret !== SECRET) return res.status(404).end();
-  try {
-    const rows = db.prepare(`
-      SELECT imdb_id, type, title, poster, year, status
-      FROM items
-      WHERE user_id = 'default'
-      ORDER BY id DESC
-    `).all();
-    res.json(rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+  if (url.includes('/api/history')) {
+    try {
+      const rows = db.prepare(`
+        SELECT imdb_id, type, title, poster, year, status
+        FROM items
+        WHERE user_id = 'default'
+        ORDER BY id DESC
+      `).all();
+      return res.json(rows);
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
   }
-});
 
-// API: Dismiss a recommendation without watching
-app.post('/:secret/api/dismiss', (req, res) => {
-  if (req.params.secret !== SECRET) return res.status(404).end();
-  const { imdbId } = req.body || {};
-  if (!imdbId) return res.status(400).json({ error: 'imdbId required' });
-  try {
-    db.prepare(`DELETE FROM recommendations_cache WHERE imdb_id = ? AND user_id = 'default'`).run(imdbId);
-    res.json({ ok: true, message: `${imdbId} dismissed` });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+  if (url.includes('/api/dismiss') && req.method === 'POST') {
+    const { imdbId } = req.body || {};
+    if (!imdbId) return res.status(400).json({ error: 'imdbId required' });
+    try {
+      db.prepare(`DELETE FROM recommendations_cache WHERE imdb_id = ? AND user_id = 'default'`).run(imdbId);
+      return res.json({ ok: true, message: `${imdbId} dismissed` });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
   }
-});
 
-// API: Manually trigger recommendation refresh
-app.post('/:secret/api/recommend/refresh', async (req, res) => {
-  if (req.params.secret !== SECRET) return res.status(404).end();
-  try {
-    recommend.run('default')
-      .then(() => console.log('[dashboard] Manual recommendation refresh complete.'))
-      .catch((err) => console.error('[dashboard] Recommendation refresh failed:', err));
-    res.json({ ok: true, message: 'Recommendation refresh triggered in background!' });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+  if (url.includes('/api/recommend/refresh') && req.method === 'POST') {
+    try {
+      recommend.run('default')
+        .then(() => console.log('[dashboard] Manual recommendation refresh complete.'))
+        .catch((err) => console.error('[dashboard] Recommendation refresh failed:', err));
+      return res.json({ ok: true, message: 'Recommendation refresh triggered in background!' });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
   }
+
+  next();
 });
 
 app.post('/:secret/mark-watched', (req, res) => {
