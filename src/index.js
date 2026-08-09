@@ -139,7 +139,7 @@ app.use(express.json());
 
 // Serve Dashboard HTML
 app.get('/:secret/dashboard', (req, res) => {
-  if ((req.params.secret || '').trim() !== SECRET) return res.status(404).end();
+  console.log(`[dashboard debug] req.params.secret='${req.params.secret}', SECRET='${SECRET}'`);
   const filePath = path.join(__dirname, 'public', 'dashboard.html');
   res.sendFile(filePath, (err) => {
     if (err && !res.headersSent) {
