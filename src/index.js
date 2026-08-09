@@ -216,19 +216,39 @@ app.use(`/${SECRET}`, (req, res, next) => {
     }
   }
 
-  // API: debug — test Gemini connectivity and env vars from the VPS
+  // API: debug — test AI connectivity and env vars from the VPS
   if (url === '/api/debug' && req.method === 'GET') {
+    const deepseekKey = process.env.DEEPSEEK_API_KEY;
     const geminiKey = process.env.GEMINI_API_KEY;
     const geminiModel = process.env.GEMINI_MODEL || 'gemini-2.0-flash-lite';
     const tmdbKey = process.env.TMDB_API_KEY;
     const info = {
+      DEEPSEEK_API_KEY: deepseekKey ? `set (${deepseekKey.slice(0, 6)}...)` : 'NOT SET',
       GEMINI_API_KEY: geminiKey ? `set (${geminiKey.slice(0, 6)}...)` : 'NOT SET',
       GEMINI_MODEL: geminiModel,
       TMDB_API_KEY: tmdbKey ? `set (${tmdbKey.slice(0, 6)}...)` : 'NOT SET',
       node_version: process.version,
     };
-    if (!geminiKey) return res.json({ ...info, gemini_test: 'skipped_no_key' });
     const nodeFetch = require('node-fetch');
+    
+    if (deepseekKey) {
+      nodeFetch('https://api.deepseek.com/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${deepseekKey}` },
+        body: JSON.stringify({
+          model: 'deepseek-chat',
+          messages: [{ role: 'user', content: 'Say ok' }],
+          max_tokens: 10,
+        }),
+      })
+        .then((r) => r.json())
+        .then((data) => res.json({ ...info, primary_ai: 'deepseek', deepseek_test: data.error ? 'api_error' : 'success', deepseek_raw: data }))
+        .catch((err) => res.json({ ...info, primary_ai: 'deepseek', deepseek_test: 'network_error', error: err.message }));
+      return;
+    }
+
+    if (!geminiKey) return res.json({ ...info, primary_ai: 'none', test: 'skipped_no_keys' });
+
     const testUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${geminiKey}`;
     nodeFetch(testUrl, {
       method: 'POST',
@@ -236,8 +256,8 @@ app.use(`/${SECRET}`, (req, res, next) => {
       body: JSON.stringify({ contents: [{ parts: [{ text: 'Reply with exactly the JSON: {"ok":true}' }] }] }),
     })
       .then((r) => r.json())
-      .then((data) => res.json({ ...info, gemini_test: data.error ? 'api_error' : 'success', gemini_raw: data }))
-      .catch((err) => res.json({ ...info, gemini_test: 'network_error', error: err.message }));
+      .then((data) => res.json({ ...info, primary_ai: 'gemini', gemini_test: data.error ? 'api_error' : 'success', gemini_raw: data }))
+      .catch((err) => res.json({ ...info, primary_ai: 'gemini', gemini_test: 'network_error', error: err.message }));
     return;
   }
 

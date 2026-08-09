@@ -270,13 +270,16 @@ Return JSON array of top 60: [{"title":"...","type":"movie|series","reason":"one
     const ranked = JSON.parse(text.slice(start, end + 1));
 
     const titleMap = new Map(top.map((c) => [normalizeTitle(c.title), c]));
-    return ranked
+    const results = ranked
       .map((r, i) => {
         const candidate = titleMap.get(normalizeTitle(r.title));
         if (!candidate) return null;
         return { ...candidate, reason: r.reason || r.Reason || r.REASON || '', score: 100 - i };
       })
       .filter(Boolean);
+
+    console.log(`[recommend] DeepSeek ranked ${results.length} items`);
+    return results;
   } catch (err) {
     console.error('[recommend] DeepSeek ranking failed:', err.message);
     return null;
@@ -286,9 +289,9 @@ Return JSON array of top 60: [{"title":"...","type":"movie|series","reason":"one
 async function rankCandidates(candidates, seedTitles) {
   if (candidates.length === 0) return [];
   return (
-    (await rankWithGemini(candidates, seedTitles)) ??
     (await rankWithDeepSeek(candidates, seedTitles)) ??
-    [...candidates].sort((a, b) => b.voteAverage - a.voteAverage).map((c, i) => ({ ...c, score: 100 - i }))
+    (await rankWithGemini(candidates, seedTitles)) ??
+    [...candidates].sort((a, b) => b.popularity - a.popularity).map((c, i) => ({ ...c, score: -(i + 1) }))
   );
 }
 
