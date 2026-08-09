@@ -9,6 +9,7 @@
 // before. This addon never touches playback itself.
 
 require('dotenv').config();
+const fs = require('fs');
 const express = require('express');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
@@ -141,7 +142,13 @@ app.use((req, res, next) => {
   const url = req.url || '';
 
   if (url.endsWith('/dashboard')) {
-    return res.sendFile(path.join(__dirname, 'dashboard.html'));
+    try {
+      const html = fs.readFileSync(path.join(__dirname, 'dashboard.html'), 'utf8');
+      res.setHeader('Content-Type', 'text/html');
+      return res.send(html);
+    } catch (err) {
+      return res.status(500).send(`Dashboard read error: ${err.message} at ${path.join(__dirname, 'dashboard.html')}`);
+    }
   }
 
   if (url.includes('/api/recommendations')) {
