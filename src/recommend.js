@@ -65,6 +65,7 @@ async function gatherCandidates(db, userId) {
       isAnime: type === 'series' ? detectAnime(r) : false,
       popularity: r.popularity || 0,
       voteAverage: r.vote_average || 0,
+      voteCount: r.vote_count || 0,
       basedOn: source,
       genreIds: r.genre_ids || [],
     });
@@ -182,7 +183,10 @@ async function rankWithGemini(candidates, seedTitles) {
   if (!process.env.GEMINI_API_KEY || candidates.length === 0) return null;
 
   // Send the top 120 by vote average to stay within token limits.
-  const top = [...candidates].sort((a, b) => b.voteAverage - a.voteAverage).slice(0, 120);
+  const top = [...candidates]
+    .filter((c) => c.voteCount >= 30 || c.popularity >= 15)
+    .sort((a, b) => b.popularity - a.popularity)
+    .slice(0, 120);
 
   const prompt = `You are a personalized movie & TV recommendation engine.
 
@@ -238,7 +242,10 @@ Output raw JSON array only — no markdown, no explanation.`;
 async function rankWithDeepSeek(candidates, seedTitles) {
   if (!process.env.DEEPSEEK_API_KEY || candidates.length === 0) return null;
 
-  const top = [...candidates].sort((a, b) => b.voteAverage - a.voteAverage).slice(0, 100);
+  const top = [...candidates]
+    .filter((c) => c.voteCount >= 30 || c.popularity >= 15)
+    .sort((a, b) => b.popularity - a.popularity)
+    .slice(0, 100);
 
   const prompt = `Movie & TV recommendation engine. User enjoyed: ${seedTitles.join(', ')}.
 
@@ -315,8 +322,8 @@ async function run(userId = 'default') {
 
   const aiIds = new Set(aiRanked.map((c) => c.tmdbId));
   const fallback = allCandidates
-    .filter((c) => !aiIds.has(c.tmdbId))
-    .sort((a, b) => b.voteAverage - a.voteAverage)
+    .filter((c) => !aiIds.has(c.tmdbId) && (c.voteCount >= 30 || c.popularity >= 15))
+    .sort((a, b) => b.popularity - a.popularity)
     .map((c, i) => ({ ...c, score: -(i + 1) }));
 
   const toCache = [...aiRanked, ...fallback].slice(0, 300);
