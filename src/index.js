@@ -229,7 +229,7 @@ app.use(`/${SECRET}`, (req, res, next) => {
     };
     if (!geminiKey) return res.json({ ...info, gemini_test: 'skipped_no_key' });
     const nodeFetch = require('node-fetch');
-    const testUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${geminiKey}`;
+    const testUrl = `https://generativelanguage.googleapis.com/v1/models/${geminiModel}:generateContent?key=${geminiKey}`;
     nodeFetch(testUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
