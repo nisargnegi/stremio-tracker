@@ -5,14 +5,14 @@ const { findByImdbId } = require('./tmdb');
 async function run() {
   const db = init();
   
-  // Find all items missing a poster or title (usually from imports)
+  // Find all items missing a poster or title, or series that might be anime
   const items = db.prepare(`
     SELECT imdb_id, user_id, type 
     FROM items 
-    WHERE poster IS NULL OR title IS NULL OR title = ''
+    WHERE poster IS NULL OR title IS NULL OR title = '' OR (type = 'series' AND is_anime = 0)
   `).all();
 
-  console.log(`Found ${items.length} items missing metadata. Fetching from TMDB...`);
+  console.log(`Found ${items.length} items to check. Fetching from TMDB...`);
   
   let successCount = 0;
   let errorCount = 0;
@@ -30,10 +30,15 @@ async function run() {
         const tmdbId = info.id || null;
         const poster = info.poster_path ? `https://image.tmdb.org/t/p/w300${info.poster_path}` : null;
         
+        const isAnimation = Array.isArray(info.genre_ids) && info.genre_ids.includes(16);
+        const isJapanese = info.original_language === 'ja' ||
+          (Array.isArray(info.origin_country) && info.origin_country.includes('JP'));
+        const isAnime = (type === 'series' && isAnimation && isJapanese) ? 1 : 0;
+
         db.prepare(`
-          UPDATE items SET title = COALESCE(?, title), year = COALESCE(?, year), tmdb_id = COALESCE(?, tmdb_id), poster = ?
+          UPDATE items SET title = COALESCE(?, title), year = COALESCE(?, year), tmdb_id = COALESCE(?, tmdb_id), poster = ?, is_anime = ?
           WHERE imdb_id = ? AND user_id = ?
-        `).run(title, year, tmdbId, poster, imdbId, userId);
+        `).run(title, year, tmdbId, poster, isAnime, imdbId, userId);
         
         successCount++;
         process.stdout.write(`\rProcessed ${i + 1}/${items.length} (${title || imdbId})          `);

@@ -29,10 +29,16 @@ function enrichItemFromTmdb(db, { imdbId, type, userId }) {
       const poster = info.poster_path
         ? `https://image.tmdb.org/t/p/w300${info.poster_path}`
         : null;
+
+      const isAnimation = Array.isArray(info.genre_ids) && info.genre_ids.includes(16);
+      const isJapanese = info.original_language === 'ja' ||
+        (Array.isArray(info.origin_country) && info.origin_country.includes('JP'));
+      const isAnime = (type === 'series' && isAnimation && isJapanese) ? 1 : 0;
+
       db.prepare(`
-        UPDATE items SET title = ?, year = ?, tmdb_id = ?, poster = ?
+        UPDATE items SET title = ?, year = ?, tmdb_id = ?, poster = ?, is_anime = ?
         WHERE imdb_id = ? AND user_id = ? AND (title IS NULL OR title = '')
-      `).run(title, year, tmdbId, poster, imdbId, userId);
+      `).run(title, year, tmdbId, poster, isAnime, imdbId, userId);
     })
     .catch(() => {}); // never let a TMDB error break tracking
 }

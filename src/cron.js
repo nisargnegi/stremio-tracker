@@ -20,8 +20,12 @@ async function checkNewEpisodes(db) {
         const found = await tmdb.findByImdbId(show.imdb_id);
         tmdbId = found.tv?.id;
         if (tmdbId) {
-          db.prepare(`UPDATE items SET tmdb_id = ?, title = ? WHERE imdb_id = ? AND user_id = ?`)
-            .run(tmdbId, found.tv.name, show.imdb_id, show.user_id);
+          const isAnimation = Array.isArray(found.tv.genre_ids) && found.tv.genre_ids.includes(16);
+          const isJapanese = found.tv.original_language === 'ja' ||
+            (Array.isArray(found.tv.origin_country) && found.tv.origin_country.includes('JP'));
+          const isAnime = (isAnimation && isJapanese) ? 1 : 0;
+          db.prepare(`UPDATE items SET tmdb_id = ?, title = ?, is_anime = ? WHERE imdb_id = ? AND user_id = ?`)
+            .run(tmdbId, found.tv.name, isAnime, show.imdb_id, show.user_id);
         }
       }
       if (!tmdbId) continue;

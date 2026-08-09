@@ -30,6 +30,7 @@ function init() {
       title TEXT,
       year INTEGER,
       poster TEXT,
+      is_anime INTEGER DEFAULT 0,
       status TEXT DEFAULT 'watching',  -- 'watching' | 'completed' | 'dropped'
       PRIMARY KEY (imdb_id, user_id)
     );
@@ -86,6 +87,12 @@ function init() {
     CREATE INDEX IF NOT EXISTS idx_stream_events_lookup
       ON stream_events (user_id, imdb_id, requested_at);
   `);
+
+  try {
+    db.prepare("ALTER TABLE items ADD COLUMN is_anime INTEGER DEFAULT 0").run();
+  } catch (_) {
+    // Ignore error if column already exists
+  }
 
   return db;
 }

@@ -179,7 +179,7 @@ app.use(`/${SECRET}`, (req, res, next) => {
   if (url === '/api/history' && req.method === 'GET') {
     try {
       const rows = db.prepare(`
-        SELECT imdb_id, type, title, poster, year, status
+        SELECT imdb_id, type, title, poster, year, status, is_anime
         FROM items
         WHERE user_id = 'default'
         ORDER BY imdb_id DESC
