@@ -33,6 +33,8 @@ services:
       - ./data:/app/data
     entrypoint: >
       sh -c "while true; do node src/cron.js; node src/recommend.js; sleep 21600; done"
+    healthcheck:
+      disable: true
     # runs every 6 hours: checks new episodes, sweeps stale watches, refreshes recs
     security_opt:
       - no-new-privileges:true
