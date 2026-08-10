@@ -10,13 +10,24 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      - name: Prepare connection variables
+        id: vars
+        run: |
+          SSH_USER="${{ secrets.VPS_USERNAME }}"
+          if [ -z "$SSH_USER" ]; then SSH_USER="root"; fi
+          echo "VPS_USER=$SSH_USER" >> $GITHUB_ENV
+
+          SSH_PORT="${{ secrets.VPS_PORT }}"
+          if [ -z "$SSH_PORT" ]; then SSH_PORT="22"; fi
+          echo "VPS_PORT=$SSH_PORT" >> $GITHUB_ENV
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USERNAME || 'root' }}
+          username: ${{ env.VPS_USER }}
           password: ${{ secrets.VPS_PASSWORD }}
-          port: ${{ secrets.VPS_PORT || 22 }}
+          port: ${{ env.VPS_PORT }}
           script: |
             cd ~/stremio-tracker
             git fetch --all
