@@ -30,6 +30,7 @@ jobs:
           port: ${{ env.VPS_PORT }}
           script: |
             cd ~/stremio-tracker
+            git remote set-url origin https://github.com/nisargnegi/stremio-tracker.git
             git fetch --all
             git reset --hard origin/main
             docker compose down
