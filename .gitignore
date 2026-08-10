@@ -6,6 +6,7 @@
 *.pem
 *.key
 *.crt
+docker-compose.override.yml
 
 # Runtime data & logs
 data/
