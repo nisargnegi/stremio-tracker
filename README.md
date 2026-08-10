@@ -154,6 +154,8 @@ docker compose up -d --build
 
 Caddy will automatically provision a free Let's Encrypt SSL/TLS certificate.
 
+> 💡 **Multi-App VPS Tip**: If you are running multiple web applications on a single VPS behind a global reverse proxy, create `docker-compose.override.yml` on your server disk to expose port `"7000:7000"` and disable the bundled Caddy container. `docker-compose.override.yml` is ignored by Git, so your custom server routing will never be overwritten by updates!
+
 ---
 
 ## 🤖 Automated CI/CD (GitHub Actions)
