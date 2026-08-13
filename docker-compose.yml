@@ -32,10 +32,10 @@ services:
     volumes:
       - ./data:/app/data
     entrypoint: >
-      sh -c "while true; do node src/cron.js; node src/recommend.js; sleep 86400; done"
+      sh -c "while true; do node src/cron.js; node src/recommend.js; sleep 604800; done"
     healthcheck:
       disable: true
-    # runs daily (every 24 hours): checks new episodes, sweeps stale watches, refreshes recs
+    # runs weekly (every 7 days): checks new episodes, sweeps stale watches, refreshes recs
     security_opt:
       - no-new-privileges:true
 

@@ -1,6 +1,6 @@
 # 🎬 Watch Tracker for Stremio
 
-A self-hosted, private, free Trakt replacement built specifically for **Stremio**. Tracks what you watch automatically (without needing to click "mark as watched"), notifies you when a new episode airs for a show you're following, auto-cleans your Continue Watching list when you're caught up, and generates personalized AI recommendations.
+A self-hosted, private, free Trakt replacement built specifically for **Stremio**. Tracks what you watch automatically (without needing to click "mark as watched"), auto-cleans your Continue Watching list when you're caught up, and generates personalized AI recommendations.
 
 Built because Trakt's free tier limits connected applications and its Stremio scrobbling can be unreliable (especially on Android TV). This tool operates independently of Stremio's built-in scrobbler.
 
@@ -14,9 +14,21 @@ Built because Trakt's free tier limits connected applications and its Stremio sc
   - Automatically marks shows as **`completed`** once you've watched up to the latest released episode (or finished an ended show / imported from Trakt).
   - Automatically **hides completed shows from Stremio's "Continue Watching"** catalog so your homepage stays clean.
   - Automatically **re-activates shows back to `watching` on release day** when a brand-new episode drops!
-- **New Episode Notifications**: Daily automated check against TMDB air dates with instant alerts via **Telegram** or **ntfy.sh**.
-- **AI-Powered Recommendations**: Candidate pool generated from your viewing history via TMDB, re-ranked with customized one-line explanations using **DeepSeek** (primary) or **Gemini** (fallback). Ranks up to 250 candidates into 120 output recommendations.
-- **Web Dashboard**: Interactive web interface featuring **Type Filter Pills** (🎬 Movies, 📺 Series, 🌸 Anime), watch history management, recommendation browser, and manual sync triggers.
+- **🤖 Per-Category AI Recommendation Engine**:
+  - 3 dedicated recommendation channels: **Movies (100)**, **TV Series (100)**, and **Anime (60)** for up to 260 total recommendations per run.
+  - Candidate pools generated from your viewing history via TMDB, re-ranked with personalized one-line explanations using **DeepSeek** (primary) or **Gemini** (fallback).
+- **📉 Smart Impression Score-Decay**:
+  - Recommendations you repeatedly view on the dashboard without clicking gradually sink down the list (`final_score = ai_score - impressions * 2.5`).
+  - Fresh AI discoveries naturally rise to the top.
+- **🌐 Interactive Web Dashboard**:
+  - **Type Filter Pills**: 🎬 Movies, 📺 Series, 🌸 Anime.
+  - **🏷️ Dynamic Genre Pills**: Filter by genre (*Action, Sci-Fi, Comedy, Drama, Thriller, Horror, Animation, etc.*).
+  - **📌 "To Watch" (Plan to Watch) Tab**: Move recommendations into a dedicated watchlist tab.
+  - **➕ Real-Time TMDB Search**: Search and add any movie, series, or anime directly to your watchlist from the dashboard.
+  - **⭐ 5-Star Interactive Ratings**: Rate items to feed DeepSeek positive (4-5★) and negative (1-2★) taste guidance.
+  - **✕ Persistent Hide / Not Interested**: Dismissed items never reappear.
+  - **📱 Mobile Responsive UI**: Touch-optimized 2-column mobile layout and responsive modals.
+- **⏱️ Weekly Automated Background Schedule**: Automated cron runs **weekly (every 7 days)** to update recommendations without wasting API credits, with manual refresh available anytime from the dashboard button.
 - **Automated CI/CD**: Built-in GitHub Actions workflow for zero-downtime SSH deployment to your VPS.
 
 ---
@@ -40,13 +52,13 @@ This codebase is **100% safe for public GitHub repositories**. All sensitive dat
 
 ---
 
-## 📋 Requirements (All Free)
+## 📋 Requirements
 
 - A small VPS or server that runs 24/7 (Oracle Cloud Always Free, DigitalOcean, Hetzner, RackNerd, Vultr, etc.)
 - A free [TMDB API Key](https://www.themoviedb.org/settings/api)
-- A Telegram bot or an [ntfy.sh](https://ntfy.sh) topic for notifications
 - A [DeepSeek API Key](https://platform.deepseek.com) or [Gemini API Key](https://aistudio.google.com/apikey) for AI recommendation re-ranking
 - A free [DuckDNS](https://www.duckdns.org) subdomain for automatic HTTPS
+- *(Optional)* An [ntfy.sh](https://ntfy.sh) topic or Telegram bot token for push notifications
 
 ---
 
@@ -129,11 +141,7 @@ TMDB_API_KEY=your_tmdb_key_here
 PORT=7000
 DB_PATH=./data/tracker.db
 
-# Notifications (Telegram or ntfy)
-TELEGRAM_BOT_TOKEN=your_bot_token
-TELEGRAM_CHAT_ID=your_chat_id
-
-# AI Recommendations (DeepSeek or Gemini)
+# AI Recommendations (DeepSeek primary, Gemini fallback)
 DEEPSEEK_API_KEY=sk-your-deepseek-key
 GEMINI_API_KEY=your-gemini-key
 
@@ -144,6 +152,9 @@ APP_SECRET=your_generated_random_secret_here
 DUCKDNS_SUBDOMAIN=my-stremio-tracker
 DUCKDNS_TOKEN=your_duckdns_token
 DUCKDNS_DOMAIN=my-stremio-tracker.duckdns.org
+
+# (Optional) Push Notifications
+NTFY_TOPIC=my-private-tracker-topic
 ```
 
 ### Step 5: Start the Docker Stack
@@ -174,22 +185,6 @@ Navigate to your GitHub Repository → **Settings** → **Secrets and variables*
 | `VPS_PORT` | SSH port on your VPS | `22` |
 
 Whenever you push commits to GitHub, the workflow will log in to your VPS via SSH, pull the latest code, and rebuild the containers with zero downtime.
-
----
-
-## 📦 Trakt Migration & Metadata Enrichment
-
-If you exported your watch history from Trakt or imported past items:
-
-```bash
-# 1. Run Trakt import (if using JSON export)
-mkdir -p data/trakt-export
-unzip trakt-export.zip -d data/trakt-export
-docker compose exec addon node src/importTrakt.js /app/data/trakt-export
-
-# 2. Enrich posters, anime flags, and calculate show completion status
-docker compose exec addon npm run fill-posters
-```
 
 ---
 
