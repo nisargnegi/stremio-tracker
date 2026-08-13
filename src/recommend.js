@@ -237,20 +237,25 @@ Output raw JSON array only — no markdown, no explanation.`;
   }
 }
 
-async function rankWithDeepSeek(candidates, seedTitles) {
+async function rankWithDeepSeek(candidates, userPref) {
   if (!process.env.DEEPSEEK_API_KEY || candidates.length === 0) return null;
 
   const top = [...candidates]
     .filter((c) => c.voteCount >= 100 && c.popularity >= 15)
     .sort((a, b) => b.popularity - a.popularity)
-    .slice(0, 250);
+    .slice(0, 300);
 
-  const prompt = `Movie & TV recommendation engine. User enjoyed: ${seedTitles.join(', ')}.
+  const { seedTitles = [], highlyRated = [], disliked = [] } = userPref || {};
+
+  const prompt = `Movie & TV recommendation engine.
+User watch history includes: ${seedTitles.join(', ')}.
+User highly rated (4-5 stars): ${highlyRated.length ? highlyRated.join(', ') : 'None specified'}.
+User disliked / low rated (1-2 stars): ${disliked.length ? disliked.join(', ') : 'None specified'}.
 
 Candidates (title | type):
 ${top.map((c) => `${c.title} | ${c.type}`).join('\n')}
 
-Return JSON array of top 120: [{"title":"...","type":"movie|series","reason":"one short sentence"}]. JSON only.`;
+Return JSON array of top 150 recommendations matching the user's taste: [{"title":"...","type":"movie|series","reason":"one short sentence"}]. JSON only.`;
 
   try {
     const res = await fetch('https://api.deepseek.com/chat/completions', {
@@ -259,7 +264,7 @@ Return JSON array of top 120: [{"title":"...","type":"movie|series","reason":"on
       body: JSON.stringify({
         model: 'deepseek-chat',
         messages: [{ role: 'user', content: prompt }],
-        max_tokens: 8000,
+        max_tokens: 12000,
       }),
     });
     const data = await res.json();
@@ -274,7 +279,7 @@ Return JSON array of top 120: [{"title":"...","type":"movie|series","reason":"on
       .map((r, i) => {
         const candidate = titleMap.get(normalizeTitle(r.title));
         if (!candidate) return null;
-        return { ...candidate, reason: r.reason || r.Reason || r.REASON || '', score: 100 - i };
+        return { ...candidate, reason: r.reason || r.Reason || r.REASON || '', score: 150 - i };
       })
       .filter(Boolean);
 
@@ -286,11 +291,11 @@ Return JSON array of top 120: [{"title":"...","type":"movie|series","reason":"on
   }
 }
 
-async function rankCandidates(candidates, seedTitles) {
+async function rankCandidates(candidates, userPref) {
   if (candidates.length === 0) return [];
   return (
-    (await rankWithDeepSeek(candidates, seedTitles)) ??
-    (await rankWithGemini(candidates, seedTitles)) ??
+    (await rankWithDeepSeek(candidates, userPref)) ??
+    (await rankWithGemini(candidates, userPref.seedTitles || [])) ??
     [...candidates].sort((a, b) => b.popularity - a.popularity).map((c, i) => ({ ...c, score: -(i + 1) }))
   );
 }
@@ -308,17 +313,29 @@ async function run(userId = 'default') {
     ORDER BY RANDOM() LIMIT 25
   `).all(userId).map((r) => r.title);
 
-  console.log(`[recommend] ${seedTitles.length} seed titles`);
+  const ratedRows = db.prepare(`
+    SELECT i.title, COALESCE(r.rating, i.rating) as rating
+    FROM items i
+    LEFT JOIN ratings r ON r.imdb_id = i.imdb_id AND r.user_id = i.user_id
+    WHERE i.user_id = ? AND (r.rating IS NOT NULL OR i.rating IS NOT NULL)
+  `).all(userId);
 
-  const alreadyOwned = new Set(
-    db.prepare('SELECT imdb_id FROM items WHERE user_id = ?').all(userId).map((r) => r.imdb_id)
-  );
-  console.log(`[recommend] Excluding ${alreadyOwned.size} already-watched items`);
+  const highlyRated = ratedRows.filter((r) => r.rating >= 4).map((r) => r.title);
+  const disliked = ratedRows.filter((r) => r.rating <= 2).map((r) => r.title);
+
+  console.log(`[recommend] ${seedTitles.length} seed titles, ${highlyRated.length} highly rated, ${disliked.length} disliked`);
+
+  const excludedIds = new Set([
+    ...db.prepare('SELECT imdb_id FROM items WHERE user_id = ?').all(userId).map((r) => r.imdb_id),
+    ...db.prepare('SELECT imdb_id FROM hidden_items WHERE user_id = ?').all(userId).map((r) => r.imdb_id),
+  ]);
+  console.log(`[recommend] Excluding ${excludedIds.size} items (watched + hidden)`);
 
   const allCandidates = await gatherCandidates(db, userId);
   console.log(`[recommend] Total candidate pool: ${allCandidates.length}`);
 
-  const aiRanked = await rankCandidates(allCandidates, seedTitles);
+  const userPref = { seedTitles, highlyRated, disliked };
+  const aiRanked = await rankCandidates(allCandidates, userPref);
   console.log(`[recommend] AI-ranked: ${aiRanked.length}`);
 
   const aiIds = new Set(aiRanked.map((c) => c.tmdbId));
@@ -351,7 +368,7 @@ async function run(userId = 'default') {
           ? await tmdb.getMovieDetails(c.tmdbId)
           : await tmdb.getShowDetails(c.tmdbId);
         const imdbId = details.external_ids?.imdb_id || details.imdb_id;
-        if (!imdbId || alreadyOwned.has(imdbId)) return;
+        if (!imdbId || excludedIds.has(imdbId)) return;
 
         const poster = c.poster ||
           (details.poster_path ? `https://image.tmdb.org/t/p/w300${details.poster_path}` : null);

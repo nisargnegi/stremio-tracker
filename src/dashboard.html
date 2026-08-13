@@ -17,6 +17,7 @@
       --text-muted: #8a8d9b;
       --border: #232736;
       --success: #2ed573;
+      --star: #ffc107;
       --movie-color: #2ed573;
       --series-color: #7c5cff;
       --anime-color: #ff4757;
@@ -32,7 +33,7 @@
     }
 
     header {
-      background: rgba(21, 23, 32, 0.9);
+      background: rgba(21, 23, 32, 0.95);
       backdrop-filter: blur(12px);
       border-bottom: 1px solid var(--border);
       position: sticky;
@@ -119,7 +120,7 @@
       padding: 0 24px;
     }
 
-    /* Type filter pills: All / Movies / Series / Anime */
+    /* Type filter pills */
     .filter-bar {
       display: flex;
       align-items: center;
@@ -146,12 +147,10 @@
       display: flex;
       align-items: center;
       gap: 6px;
+      white-space: nowrap;
     }
     .filter-pill:hover { border-color: #383e56; color: var(--text); }
-    .filter-pill.active {
-      color: #fff;
-      border-color: transparent;
-    }
+    .filter-pill.active { color: #fff; border-color: transparent; }
     .filter-pill.active.fp-all    { background: var(--accent); }
     .filter-pill.active.fp-movie  { background: var(--movie-color); color: #000; }
     .filter-pill.active.fp-series { background: var(--series-color); }
@@ -186,9 +185,10 @@
     }
     .search-input:focus { border-color: var(--accent); }
 
+    /* Grid & Cards */
     .grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
       gap: 18px;
     }
 
@@ -212,6 +212,7 @@
       width: 100%;
       padding-top: 145%;
       background: #10121a;
+      cursor: pointer;
     }
     .poster-img {
       position: absolute;
@@ -239,10 +240,37 @@
       border-radius: 6px;
       text-transform: uppercase;
       letter-spacing: 0.5px;
+      pointer-events: none;
     }
     .badge-anime  { background: rgba(255, 71, 87, 0.9); }
     .badge-movie  { background: rgba(46, 213, 115, 0.9); color: #000; }
     .badge-series { background: rgba(124, 92, 255, 0.9); }
+
+    /* Hide button on top-left overlay */
+    .hide-btn-overlay {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      background: rgba(11, 12, 16, 0.85);
+      color: var(--text-muted);
+      border: 1px solid rgba(255,255,255,0.15);
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+      z-index: 5;
+    }
+    .hide-btn-overlay:hover {
+      background: var(--danger);
+      color: #fff;
+      border-color: var(--danger);
+      transform: scale(1.1);
+    }
 
     .card-content {
       padding: 12px 14px 14px;
@@ -257,16 +285,35 @@
       color: #fff;
       margin-bottom: 6px;
       line-height: 1.3;
+      cursor: pointer;
     }
+    .card-title:hover { color: var(--accent); }
 
     .card-reason {
       font-size: 11px;
       color: var(--text-muted);
       line-height: 1.45;
-      margin-bottom: 12px;
+      margin-bottom: 10px;
       flex: 1;
       font-style: italic;
     }
+
+    /* 5-Star Rating Component */
+    .star-rating {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      margin: 4px 0 8px;
+    }
+    .star-icon {
+      font-size: 15px;
+      color: #383e56;
+      cursor: pointer;
+      transition: color 0.15s, transform 0.15s;
+      user-select: none;
+    }
+    .star-icon.filled { color: var(--star); }
+    .star-icon:hover { transform: scale(1.2); color: var(--star); }
 
     .card-actions {
       display: flex;
@@ -290,6 +337,7 @@
     .action-btn-watched:hover { background: var(--success); border-color: var(--success); color: #000; }
     .action-btn-dismiss:hover { background: var(--danger); border-color: var(--danger); color: #fff; }
 
+    /* Toast */
     .toast {
       position: fixed;
       bottom: 24px;
@@ -324,8 +372,136 @@
     }
     .empty-state .empty-icon { font-size: 48px; margin-bottom: 12px; }
     .empty-state .empty-msg { font-size: 14px; }
-
     .status-text { font-size: 12px; color: var(--text-muted); }
+
+    /* Detail Modal */
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(11, 12, 16, 0.85);
+      backdrop-filter: blur(8px);
+      z-index: 999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s;
+    }
+    .modal-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .modal-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      width: 100%;
+      max-width: 640px;
+      max-height: 90vh;
+      overflow-y: auto;
+      position: relative;
+      box-shadow: 0 16px 48px rgba(0,0,0,0.8);
+      display: flex;
+      flex-direction: column;
+    }
+    .modal-backdrop {
+      width: 100%;
+      height: 200px;
+      background-size: cover;
+      background-position: center;
+      position: relative;
+      border-top-left-radius: 16px;
+      border-top-right-radius: 16px;
+    }
+    .modal-backdrop-overlay {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: linear-gradient(to bottom, rgba(21,23,32,0.2) 0%, rgba(21,23,32,1) 100%);
+    }
+    .modal-close-btn {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      background: rgba(0,0,0,0.6);
+      border: none;
+      color: #fff;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      font-size: 16px;
+      cursor: pointer;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-body {
+      padding: 20px 24px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .modal-header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .modal-title { font-size: 20px; font-weight: 700; color: #fff; line-height: 1.2; }
+    .modal-meta { font-size: 13px; color: var(--text-muted); display: flex; gap: 10px; align-items: center; margin-top: 4px; }
+    .modal-overview { font-size: 13px; color: var(--text); line-height: 1.55; }
+    .modal-genres { display: flex; flex-wrap: wrap; gap: 6px; }
+    .genre-tag { background: #232736; color: var(--text-muted); font-size: 11px; padding: 4px 10px; border-radius: 12px; }
+    .modal-trailer-btn {
+      background: #ff0000;
+      color: #fff;
+      border: none;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      text-decoration: none;
+      width: fit-content;
+      transition: background 0.2s;
+    }
+    .modal-trailer-btn:hover { background: #cc0000; }
+
+    /* Mobile Responsive Layout (Phones < 600px) */
+    @media (max-width: 600px) {
+      header { padding: 10px 14px; }
+      main { padding: 0 12px; margin: 14px auto; }
+      .filter-bar {
+        overflow-x: auto;
+        flex-wrap: nowrap;
+        padding-bottom: 6px;
+        -webkit-overflow-scrolling: touch;
+      }
+      .grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+      }
+      .poster-wrapper { padding-top: 130%; }
+      .card-content { padding: 8px 10px 10px; }
+      .card-title { font-size: 11px; margin-bottom: 4px; }
+      .card-reason {
+        font-size: 10px;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        margin-bottom: 6px;
+      }
+      .star-icon { font-size: 13px; }
+      .action-btn { padding: 5px; font-size: 10px; }
+      .modal-backdrop { height: 140px; }
+      .modal-title { font-size: 17px; }
+    }
   </style>
 </head>
 <body>
@@ -366,20 +542,27 @@
     <div class="grid" id="content-grid"></div>
   </main>
 
+  <!-- Detail Modal -->
+  <div class="modal-overlay" id="detail-modal" onclick="closeModalOnOverlay(event)">
+    <div class="modal-card" id="modal-card-content">
+      <button class="modal-close-btn" onclick="closeModal()">✕</button>
+      <div id="modal-inner">
+        <!-- Rendered dynamically -->
+      </div>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
   <script>
-    // ---- Security: extract APP_SECRET from URL path ---
-    // Dashboard is only reachable at /:secret/dashboard, so path[1] is the secret.
     const SECRET = window.location.pathname.split('/')[1];
     const API_BASE = `/${SECRET}/api`;
 
     let allRecs    = [];
     let allHistory = [];
     let currentTab    = 'recs';
-    let currentFilter = 'all'; // 'all' | 'movie' | 'series' | 'anime'
+    let currentFilter = 'all';
 
-    // ---- Utility: safe HTML escaping (prevents XSS from TMDB titles/reasons) ----
     function esc(str) {
       if (!str) return '';
       return String(str)
@@ -419,7 +602,6 @@
       }
     }
 
-    // ---- Tab switching ----
     function switchTab(tab, e) {
       currentTab = tab;
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -428,7 +610,6 @@
       renderGrid();
     }
 
-    // ---- Type filter pills ----
     function setFilter(filter, e) {
       currentFilter = filter;
       document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
@@ -451,6 +632,35 @@
       document.getElementById('count-anime').textContent  = counts.anime;
     }
 
+    // ---- Interactive Star Rating Helper ----
+    function renderStarsHtml(imdbId, currentRating = 0) {
+      let stars = '';
+      for (let i = 1; i <= 5; i++) {
+        const isFilled = i <= (currentRating || 0) ? 'filled' : '';
+        stars += `<span class="star-icon ${isFilled}" onclick="rateItem('${esc(imdbId)}', ${i}, event)">★</span>`;
+      }
+      return `<div class="star-rating">${stars}</div>`;
+    }
+
+    async function rateItem(imdbId, rating, event) {
+      if (event) event.stopPropagation();
+      try {
+        await fetch(`${API_BASE}/rate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imdbId, rating }),
+        });
+        showToast(`Saved ${rating}-star rating! ⭐`);
+        
+        // Update local object
+        const item = [...allRecs, ...allHistory].find(i => i.imdb_id === imdbId);
+        if (item) item.rating = rating;
+        renderGrid();
+      } catch (err) {
+        showToast('Failed to save rating: ' + err.message);
+      }
+    }
+
     // ---- Grid rendering ----
     function renderGrid() {
       const query = document.getElementById('search-box').value.toLowerCase();
@@ -459,12 +669,10 @@
 
       let items = currentTab === 'recs' ? allRecs : allHistory;
 
-      // Apply type filter
       if (currentFilter !== 'all') {
         items = items.filter(i => categorise(i) === currentFilter);
       }
 
-      // Apply search
       if (query) {
         items = items.filter(i => (i.title || i.imdb_id).toLowerCase().includes(query));
       }
@@ -493,23 +701,31 @@
           ? `<img class="poster-img" src="${esc(item.poster)}" alt="${esc(item.title)}" loading="lazy">`
           : `<div class="poster-fallback">🎬</div>`;
 
+        const hideOverlayHtml = currentTab === 'recs'
+          ? `<button class="hide-btn-overlay" title="Not Interested / Hide" onclick="hideItem('${esc(item.imdb_id)}', '${esc(item.title)}', event)">✕</button>`
+          : '';
+
         const actionsHtml = currentTab === 'recs'
           ? `<button class="action-btn action-btn-watched" onclick="markWatched('${esc(item.imdb_id)}', '${esc(item.type)}')">✓ Watched</button>
-             <button class="action-btn action-btn-dismiss" onclick="dismissRec('${esc(item.imdb_id)}')">✕ Hide</button>`
+             <button class="action-btn action-btn-dismiss" onclick="hideItem('${esc(item.imdb_id)}', '${esc(item.title)}', event)">✕ Hide</button>`
           : `<button class="action-btn action-btn-dismiss" onclick="removeHistory('${esc(item.imdb_id)}')">Remove</button>`;
 
         const reasonHtml = currentTab === 'recs'
           ? `<div class="card-reason">${esc(item.reason) || 'Recommended based on your watch history'}</div>`
           : '';
 
+        const starWidgetHtml = renderStarsHtml(item.imdb_id, item.rating || 0);
+
         card.innerHTML = `
-          <div class="poster-wrapper">
+          <div class="poster-wrapper" onclick="openDetailModal('${esc(item.imdb_id)}', '${esc(item.type)}')">
+            ${hideOverlayHtml}
             ${posterHtml}
             <div class="badge ${badgeClass}">${badgeLabel}</div>
           </div>
           <div class="card-content">
-            <div class="card-title">${esc(item.title) || item.imdb_id}</div>
+            <div class="card-title" onclick="openDetailModal('${esc(item.imdb_id)}', '${esc(item.type)}')">${esc(item.title) || item.imdb_id}</div>
             ${reasonHtml}
+            ${starWidgetHtml}
             <div class="card-actions">${actionsHtml}</div>
           </div>`;
 
@@ -529,15 +745,18 @@
       loadData();
     }
 
-    async function dismissRec(imdbId) {
+    async function hideItem(imdbId, title, event) {
+      if (event) event.stopPropagation();
       document.getElementById(`card-${imdbId}`)?.remove();
-      showToast('Recommendation hidden');
-      await fetch(`${API_BASE}/dismiss`, {
+      allRecs = allRecs.filter(i => i.imdb_id !== imdbId);
+      showToast('Item hidden persistently');
+      await fetch(`${API_BASE}/hide`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imdbId }),
+        body: JSON.stringify({ imdbId, title }),
       });
-      loadData();
+      updatePillCounts();
+      renderGrid();
     }
 
     async function removeHistory(imdbId) {
@@ -560,7 +779,6 @@
         const res  = await fetch(`${API_BASE}/recommend/refresh`, { method: 'POST' });
         const data = await res.json();
         showToast(data.message || 'Refresh triggered! Results appear in ~30s.');
-        // Wait a bit then reload — the refresh runs async server-side
         setTimeout(loadData, 5000);
       } catch (err) {
         showToast('Refresh failed: ' + err.message);
@@ -568,6 +786,80 @@
         btn.disabled = false;
         btn.innerHTML = `<span>🔄</span> Refresh`;
       }
+    }
+
+    // ---- Detail Modal ----
+    async function openDetailModal(imdbId, type) {
+      const modal = document.getElementById('detail-modal');
+      const inner = document.getElementById('modal-inner');
+      inner.innerHTML = `
+        <div style="padding: 40px; text-align: center; color: var(--text-muted);">
+          <div class="spinner" style="margin: 0 auto 12px;"></div>
+          Loading details...
+        </div>`;
+      modal.classList.add('active');
+
+      try {
+        const res = await fetch(`${API_BASE}/details/${type}/${imdbId}`);
+        if (!res.ok) throw new Error('Could not load details');
+        const data = await res.json();
+
+        const backdropStyle = data.backdrop
+          ? `background-image: url('${esc(data.backdrop)}');`
+          : `background: #10121a;`;
+
+        const trailerButton = data.trailerKey
+          ? `<a class="modal-trailer-btn" href="https://www.youtube.com/watch?v=${esc(data.trailerKey)}" target="_blank" rel="noopener noreferrer">▶ Watch Trailer</a>`
+          : `<a class="modal-trailer-btn" href="https://www.youtube.com/results?search_query=${encodeURIComponent((data.title || '') + ' trailer')}" target="_blank" rel="noopener noreferrer">🔍 Search Trailer on YouTube</a>`;
+
+        const genresHtml = (data.genres || []).map(g => `<span class="genre-tag">${esc(g)}</span>`).join('');
+
+        inner.innerHTML = `
+          <div class="modal-backdrop" style="${backdropStyle}">
+            <div class="modal-backdrop-overlay"></div>
+          </div>
+          <div class="modal-body">
+            <div class="modal-header-row">
+              <div>
+                <div class="modal-title">${esc(data.title)}</div>
+                <div class="modal-meta">
+                  <span>${esc(data.year)}</span>
+                  <span>•</span>
+                  <span>⭐ ${esc(data.voteAverage)} (${data.voteCount} votes)</span>
+                  <span>•</span>
+                  <span style="text-transform: capitalize;">${esc(data.type)}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="modal-genres">${genresHtml}</div>
+
+            <div class="modal-overview">${esc(data.overview)}</div>
+
+            <div>
+              <div style="font-size: 12px; color: var(--text-muted); font-weight: 600; margin-bottom: 4px;">Your Rating:</div>
+              ${renderStarsHtml(imdbId, data.rating || 0)}
+            </div>
+
+            <div style="display: flex; gap: 12px; align-items: center; margin-top: 8px;">
+              ${trailerButton}
+              <button class="btn" style="background: var(--success); color: #000;" onclick="markWatched('${esc(imdbId)}', '${esc(type)}'); closeModal();">✓ Mark Watched</button>
+            </div>
+          </div>`;
+      } catch (err) {
+        inner.innerHTML = `
+          <div style="padding: 30px; text-align: center; color: var(--danger);">
+            Failed to load details: ${esc(err.message)}
+          </div>`;
+      }
+    }
+
+    function closeModal() {
+      document.getElementById('detail-modal').classList.remove('active');
+    }
+
+    function closeModalOnOverlay(e) {
+      if (e.target.id === 'detail-modal') closeModal();
     }
 
     // ---- Boot ----

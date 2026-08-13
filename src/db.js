@@ -84,12 +84,27 @@ function init() {
       PRIMARY KEY (user_id, imdb_id)
     );
 
+    -- Items user explicitly dismissed/hidden from recommendations
+    CREATE TABLE IF NOT EXISTS hidden_items (
+      user_id TEXT NOT NULL DEFAULT 'default',
+      imdb_id TEXT NOT NULL,
+      title TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      PRIMARY KEY (user_id, imdb_id)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_stream_events_lookup
       ON stream_events (user_id, imdb_id, requested_at);
   `);
 
   try {
     db.prepare("ALTER TABLE items ADD COLUMN is_anime INTEGER DEFAULT 0").run();
+  } catch (_) {
+    // Ignore error if column already exists
+  }
+
+  try {
+    db.prepare("ALTER TABLE items ADD COLUMN rating INTEGER").run();
   } catch (_) {
     // Ignore error if column already exists
   }

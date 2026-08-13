@@ -106,6 +106,23 @@ async function discover(type, { genreIds = [], minVote = 6.5, language = null, p
   return data.results || [];
 }
 
+async function getVideos(tmdbId, type) {
+  const kind = type === 'movie' ? 'movie' : 'tv';
+  try {
+    const data = await tmdbGet(`/${kind}/${tmdbId}/videos`);
+    const results = data.results || [];
+    // Prefer official Trailer on YouTube
+    const trailer = results.find(
+      (v) => v.site === 'YouTube' && v.type === 'Trailer' && v.official
+    ) || results.find(
+      (v) => v.site === 'YouTube' && (v.type === 'Trailer' || v.type === 'Teaser')
+    ) || results.find((v) => v.site === 'YouTube');
+    return trailer ? trailer.key : null;
+  } catch (err) {
+    return null;
+  }
+}
+
 module.exports = {
   findByImdbId,
   getShowDetails,
@@ -117,5 +134,6 @@ module.exports = {
   getPopular,
   getNowPlayingOrOnAir,
   discover,
+  getVideos,
   sleep,
 };

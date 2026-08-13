@@ -175,19 +175,104 @@ app.use(`/${SECRET}`, (req, res, next) => {
     }
   }
 
-  // API: watch history
+  // API: watch history (includes ratings)
   if (url === '/api/history' && req.method === 'GET') {
     try {
       const rows = db.prepare(`
-        SELECT imdb_id, type, title, poster, year, status, is_anime
-        FROM items
-        WHERE user_id = 'default'
-        ORDER BY imdb_id DESC
+        SELECT i.imdb_id, i.type, i.title, i.poster, i.year, i.status, i.is_anime, COALESCE(r.rating, i.rating) as rating
+        FROM items i
+        LEFT JOIN ratings r ON r.imdb_id = i.imdb_id AND r.user_id = i.user_id
+        WHERE i.user_id = 'default'
+        ORDER BY i.imdb_id DESC
       `).all();
       return res.json(rows);
     } catch (err) {
       return res.status(500).json({ error: err.message });
     }
+  }
+
+  // API: hide / not interested item permanently
+  if (url === '/api/hide' && req.method === 'POST') {
+    const { imdbId, title } = req.body || {};
+    if (!imdbId) return res.status(400).json({ error: 'imdbId required' });
+    try {
+      db.prepare(`
+        INSERT INTO hidden_items (user_id, imdb_id, title)
+        VALUES ('default', ?, ?)
+        ON CONFLICT(user_id, imdb_id) DO UPDATE SET title = excluded.title
+      `).run(imdbId, title || '');
+      db.prepare(`DELETE FROM recommendations_cache WHERE imdb_id = ? AND user_id = 'default'`).run(imdbId);
+      return res.json({ ok: true, message: `${imdbId} hidden persistently` });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
+  // API: rate an item (1-5 stars)
+  if (url === '/api/rate' && req.method === 'POST') {
+    const { imdbId, rating } = req.body || {};
+    if (!imdbId || typeof rating !== 'number') return res.status(400).json({ error: 'imdbId and rating (1-5) required' });
+    const score = Math.max(1, Math.min(5, Math.round(rating)));
+    try {
+      db.prepare(`
+        INSERT INTO ratings (user_id, imdb_id, rating, rated_at)
+        VALUES ('default', ?, ?, datetime('now'))
+        ON CONFLICT(user_id, imdb_id) DO UPDATE SET rating = excluded.rating, rated_at = datetime('now')
+      `).run(imdbId, score);
+      db.prepare(`UPDATE items SET rating = ? WHERE imdb_id = ? AND user_id = 'default'`).run(score, imdbId);
+      return res.json({ ok: true, imdbId, rating: score });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
+  // API: fetch rich item details (backdrop, overview, trailer key, genres, user rating)
+  if (url.startsWith('/api/details/') && req.method === 'GET') {
+    const parts = url.split('/'); // ['','api','details', type, imdbId]
+    const type = parts[3];
+    const imdbId = parts[4];
+    if (!imdbId || !['movie', 'series'].includes(type)) {
+      return res.status(400).json({ error: 'type (movie|series) and imdbId required' });
+    }
+    (async () => {
+      try {
+        const found = await tmdb.findByImdbId(imdbId);
+        const tmdbItem = type === 'movie' ? found.movie : found.tv;
+        if (!tmdbItem?.id) {
+          return res.status(404).json({ error: 'Item not found on TMDB' });
+        }
+        const [details, trailerKey] = await Promise.all([
+          type === 'movie' ? tmdb.getMovieDetails(tmdbItem.id) : tmdb.getShowDetails(tmdbItem.id),
+          tmdb.getVideos(tmdbItem.id, type),
+        ]);
+
+        const userRatingRow = db.prepare(`
+          SELECT COALESCE(r.rating, i.rating) as rating
+          FROM items i
+          LEFT JOIN ratings r ON r.imdb_id = i.imdb_id AND r.user_id = i.user_id
+          WHERE i.user_id = 'default' AND i.imdb_id = ?
+        `).get(imdbId);
+
+        return res.json({
+          imdbId,
+          tmdbId: tmdbItem.id,
+          type,
+          title: details.title || details.name || '',
+          overview: details.overview || 'No overview available.',
+          poster: details.poster_path ? `https://image.tmdb.org/t/p/w500${details.poster_path}` : null,
+          backdrop: details.backdrop_path ? `https://image.tmdb.org/t/p/w1280${details.backdrop_path}` : null,
+          year: (details.release_date || details.first_air_date || '').slice(0, 4),
+          genres: (details.genres || []).map((g) => g.name),
+          voteAverage: details.vote_average ? details.vote_average.toFixed(1) : 'N/A',
+          voteCount: details.vote_count || 0,
+          trailerKey: trailerKey || null,
+          rating: userRatingRow?.rating || null,
+        });
+      } catch (err) {
+        return res.status(500).json({ error: err.message });
+      }
+    })();
+    return;
   }
 
   // API: dismiss a recommendation
@@ -265,23 +350,31 @@ app.use(`/${SECRET}`, (req, res, next) => {
 });
 
 app.post(`/${SECRET}/mark-watched`, (req, res) => {
-  const { imdbId, type } = req.body || {};
+  const { imdbId, type, rating } = req.body || {};
   if (!imdbId || !['movie', 'series'].includes(type)) {
     return res.status(400).json({ error: 'imdbId and type (movie|series) required' });
   }
   try {
+    const score = (typeof rating === 'number' && rating >= 1 && rating <= 5) ? Math.round(rating) : null;
     db.prepare(`
-      INSERT INTO items (imdb_id, user_id, type, status)
-      VALUES (?, 'default', ?, 'completed')
-      ON CONFLICT(imdb_id, user_id) DO UPDATE SET status = 'completed'
-    `).run(imdbId, type);
+      INSERT INTO items (imdb_id, user_id, type, status, rating)
+      VALUES (?, 'default', ?, 'completed', ?)
+      ON CONFLICT(imdb_id, user_id) DO UPDATE SET status = 'completed', rating = COALESCE(excluded.rating, items.rating)
+    `).run(imdbId, type, score);
+    if (score) {
+      db.prepare(`
+        INSERT INTO ratings (user_id, imdb_id, rating, rated_at)
+        VALUES ('default', ?, ?, datetime('now'))
+        ON CONFLICT(user_id, imdb_id) DO UPDATE SET rating = excluded.rating, rated_at = datetime('now')
+      `).run(imdbId, score);
+    }
     db.prepare(`
       INSERT INTO watched (user_id, imdb_id, type, source)
       VALUES ('default', ?, ?, 'manual')
       ON CONFLICT(user_id, imdb_id, season, episode) DO NOTHING
     `).run(imdbId, type);
     db.prepare(`DELETE FROM recommendations_cache WHERE imdb_id = ?`).run(imdbId);
-    res.json({ ok: true, message: `${imdbId} marked as watched` });
+    res.json({ ok: true, message: `${imdbId} marked as watched`, rating: score });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
