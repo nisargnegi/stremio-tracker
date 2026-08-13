@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Stremio Watch Tracker — Dashboard</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
@@ -39,12 +39,18 @@
       position: sticky;
       top: 0;
       z-index: 100;
-      padding: 14px 24px;
+      padding: 12px 24px;
       display: flex;
       justify-content: space-between;
       align-items: center;
       flex-wrap: wrap;
       gap: 12px;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
     }
 
     .logo {
@@ -115,7 +121,7 @@
 
     main {
       max-width: 1400px;
-      margin: 24px auto;
+      margin: 20px auto;
       padding: 0 24px;
     }
 
@@ -123,15 +129,16 @@
       display: flex;
       align-items: center;
       gap: 8px;
-      margin-bottom: 12px;
+      margin-bottom: 10px;
       flex-wrap: wrap;
     }
+    .filter-bar::-webkit-scrollbar { display: none; }
     .filter-label {
       font-size: 12px;
       color: var(--text-muted);
       font-weight: 600;
       margin-right: 4px;
-      min-width: 50px;
+      min-width: 44px;
     }
     .filter-pill {
       background: var(--card-bg);
@@ -156,7 +163,7 @@
     .filter-pill.active.fp-anime  { background: var(--anime-color); }
 
     .genre-bar {
-      margin-bottom: 18px;
+      margin-bottom: 16px;
     }
     .genre-pill {
       background: rgba(255,255,255,0.05);
@@ -185,7 +192,7 @@
       justify-content: space-between;
       align-items: center;
       margin-bottom: 16px;
-      gap: 16px;
+      gap: 12px;
       flex-wrap: wrap;
     }
 
@@ -345,8 +352,8 @@
 
     .action-btn {
       flex: 1;
-      padding: 6px 4px;
-      font-size: 10px;
+      padding: 7px 4px;
+      font-size: 11px;
       font-weight: 600;
       border-radius: 6px;
       border: 1px solid var(--border);
@@ -530,21 +537,68 @@
       margin-top: 3px;
     }
 
+    /* ---- Dedicated Mobile Optimization (< 600px) ---- */
     @media (max-width: 600px) {
-      header { padding: 10px 14px; }
-      main { padding: 0 12px; margin: 14px auto; }
+      header {
+        padding: 10px 12px;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+      }
+      .logo { font-size: 16px; }
+      .logo-icon { width: 28px; height: 28px; font-size: 14px; }
+      
+      .header-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        width: 100%;
+      }
+
+      .header-actions {
+        gap: 6px;
+      }
+      .header-actions .btn {
+        padding: 6px 10px;
+        font-size: 11px;
+      }
+
+      .nav-tabs {
+        width: 100%;
+        justify-content: space-between;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+      .tab-btn {
+        flex: 1;
+        padding: 7px 4px;
+        font-size: 11px;
+        text-align: center;
+        white-space: nowrap;
+      }
+
+      main { padding: 0 10px; margin: 12px auto; }
+      
       .filter-bar {
         overflow-x: auto;
         flex-wrap: nowrap;
-        padding-bottom: 6px;
+        padding-bottom: 4px;
         -webkit-overflow-scrolling: touch;
+        margin-bottom: 8px;
       }
+      .filter-label { min-width: 40px; font-size: 11px; }
+      .filter-pill, .genre-pill { padding: 4px 10px; font-size: 11px; }
+
+      .toolbar { margin-bottom: 12px; gap: 8px; }
+      .search-input { width: 100%; padding: 8px 12px; font-size: 13px; }
+      .status-text { font-size: 11px; }
+
       .grid {
         grid-template-columns: repeat(2, 1fr);
         gap: 10px;
       }
-      .poster-wrapper { padding-top: 130%; }
-      .card-content { padding: 8px 10px 10px; }
+      .poster-wrapper { padding-top: 135%; }
+      .card-content { padding: 8px 8px 10px; }
       .card-title { font-size: 11px; margin-bottom: 4px; }
       .card-reason {
         font-size: 10px;
@@ -555,33 +609,73 @@
         margin-bottom: 6px;
       }
       .star-icon { font-size: 13px; }
-      .action-btn { padding: 5px 3px; font-size: 9px; }
+
+      /* Mobile 2-column card actions grid */
+      .card-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 4px;
+      }
+      .card-actions .action-btn-watched {
+        grid-column: 1 / -1;
+      }
+      .action-btn {
+        padding: 6px 2px;
+        font-size: 10px;
+      }
+
+      /* Mobile Modals */
+      .modal-card { width: 95%; max-height: 92vh; border-radius: 12px; }
+      .modal-body { padding: 14px; gap: 10px; }
       .modal-backdrop { height: 140px; }
-      .modal-title { font-size: 17px; }
+      .modal-title { font-size: 16px; }
+      .modal-meta { font-size: 11px; gap: 6px; flex-wrap: wrap; }
+      .modal-overview { font-size: 12px; line-height: 1.45; }
+      .modal-actions-row {
+        flex-direction: column;
+        align-items: stretch !important;
+        gap: 8px !important;
+      }
+      .modal-actions-row .btn,
+      .modal-actions-row .modal-trailer-btn {
+        width: 100% !important;
+        justify-content: center;
+      }
+
+      .toast {
+        left: 16px;
+        right: 16px;
+        bottom: 16px;
+        text-align: center;
+        padding: 10px 14px;
+        font-size: 12px;
+      }
     }
   </style>
 </head>
 <body>
 
   <header>
-    <div class="logo">
-      <div class="logo-icon">🍿</div>
-      <span>Watch Tracker</span>
+    <div class="header-top">
+      <div class="logo">
+        <div class="logo-icon">🍿</div>
+        <span>Watch Tracker</span>
+      </div>
+
+      <div class="header-actions">
+        <button class="btn" style="background: var(--success); color: #000;" onclick="openAddTitleModal()">
+          <span>➕</span> Add Title
+        </button>
+        <button class="btn" id="refresh-btn" onclick="triggerRefresh()">
+          <span>🔄</span> Refresh
+        </button>
+      </div>
     </div>
 
     <div class="nav-tabs">
       <button class="tab-btn active" id="tab-recs" onclick="switchTab('recs', event)">💡 Recommendations (<span id="recs-count">0</span>)</button>
       <button class="tab-btn" id="tab-towatch" onclick="switchTab('towatch', event)">📌 To Watch (<span id="towatch-count">0</span>)</button>
       <button class="tab-btn" id="tab-history" onclick="switchTab('history', event)">📊 History (<span id="history-count">0</span>)</button>
-    </div>
-
-    <div class="header-actions">
-      <button class="btn" style="background: var(--success); color: #000;" onclick="openAddTitleModal()">
-        <span>➕</span> Add Title
-      </button>
-      <button class="btn" id="refresh-btn" onclick="triggerRefresh()">
-        <span>🔄</span> Refresh
-      </button>
     </div>
   </header>
 
@@ -1119,7 +1213,7 @@
               ${renderStarsHtml(imdbId, data.rating || 0)}
             </div>
 
-            <div style="display: flex; gap: 10px; align-items: center; margin-top: 8px; flex-wrap: wrap;">
+            <div class="modal-actions-row" style="display: flex; gap: 10px; align-items: center; margin-top: 8px; flex-wrap: wrap;">
               ${trailerButton}
               <button class="btn" style="background: var(--accent); color: #fff;" onclick="saveToWatchFromObj('${esc(imdbId)}', '${esc(type)}'); closeModal();">📌 Save to To-Watch</button>
               <button class="btn" style="background: var(--success); color: #000;" onclick="markWatched('${esc(imdbId)}', '${esc(type)}'); closeModal();">✓ Mark Watched</button>
