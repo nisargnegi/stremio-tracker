@@ -800,8 +800,11 @@
       modal.classList.add('active');
 
       try {
-        const res = await fetch(`${API_BASE}/details/${type}/${imdbId}`);
-        if (!res.ok) throw new Error('Could not load details');
+        const res = await fetch(`${API_BASE}/details/${type}/${encodeURIComponent(imdbId)}`);
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || `HTTP ${res.status}`);
+        }
         const data = await res.json();
 
         const backdropStyle = data.backdrop

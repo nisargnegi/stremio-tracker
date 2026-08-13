@@ -228,44 +228,79 @@ app.use(`/${SECRET}`, (req, res, next) => {
 
   // API: fetch rich item details (backdrop, overview, trailer key, genres, user rating)
   if (url.startsWith('/api/details/') && req.method === 'GET') {
-    const parts = url.split('/'); // ['','api','details', type, imdbId]
+    const parts = url.split('/'); // ['','api','details', type, imdbId...]
     const type = parts[3];
-    const imdbId = parts[4];
-    if (!imdbId || !['movie', 'series'].includes(type)) {
+    const rawImdbId = parts.slice(4).join('/'); // Handles any slash encoding
+    if (!rawImdbId || !['movie', 'series'].includes(type)) {
       return res.status(400).json({ error: 'type (movie|series) and imdbId required' });
     }
+    const cleanImdbId = rawImdbId.split(':')[0];
+
     (async () => {
       try {
-        const found = await tmdb.findByImdbId(imdbId);
-        const tmdbItem = type === 'movie' ? found.movie : found.tv;
-        if (!tmdbItem?.id) {
-          return res.status(404).json({ error: 'Item not found on TMDB' });
-        }
-        const [details, trailerKey] = await Promise.all([
-          type === 'movie' ? tmdb.getMovieDetails(tmdbItem.id) : tmdb.getShowDetails(tmdbItem.id),
-          tmdb.getVideos(tmdbItem.id, type),
-        ]);
-
         const userRatingRow = db.prepare(`
           SELECT COALESCE(r.rating, i.rating) as rating
           FROM items i
           LEFT JOIN ratings r ON r.imdb_id = i.imdb_id AND r.user_id = i.user_id
-          WHERE i.user_id = 'default' AND i.imdb_id = ?
-        `).get(imdbId);
+          WHERE i.user_id = 'default' AND (i.imdb_id = ? OR i.imdb_id = ?)
+        `).get(rawImdbId, cleanImdbId);
 
+        // 1. Check if tmdb_id is already in DB
+        const dbItem = db.prepare(`
+          SELECT tmdb_id, title, poster, type FROM items WHERE (imdb_id = ? OR imdb_id = ?) AND tmdb_id IS NOT NULL AND user_id = 'default'
+          UNION
+          SELECT NULL as tmdb_id, title, poster, type FROM recommendations_cache WHERE (imdb_id = ? OR imdb_id = ?) AND user_id = 'default'
+        `).get(rawImdbId, cleanImdbId, rawImdbId, cleanImdbId);
+
+        let tmdbId = dbItem?.tmdb_id;
+        let actualType = type;
+
+        if (!tmdbId) {
+          const found = await tmdb.findByImdbId(cleanImdbId);
+          const tmdbItem = (type === 'movie' ? found.movie : found.tv) || found.movie || found.tv;
+          if (tmdbItem?.id) {
+            tmdbId = tmdbItem.id;
+            actualType = (found.movie?.id === tmdbId) ? 'movie' : 'series';
+          }
+        }
+
+        if (tmdbId) {
+          const [details, trailerKey] = await Promise.all([
+            actualType === 'movie' ? tmdb.getMovieDetails(tmdbId) : tmdb.getShowDetails(tmdbId),
+            tmdb.getVideos(tmdbId, actualType),
+          ]);
+
+          return res.json({
+            imdbId: rawImdbId,
+            tmdbId,
+            type: actualType,
+            title: details.title || details.name || dbItem?.title || rawImdbId,
+            overview: details.overview || 'No overview available.',
+            poster: details.poster_path ? `https://image.tmdb.org/t/p/w500${details.poster_path}` : (dbItem?.poster || null),
+            backdrop: details.backdrop_path ? `https://image.tmdb.org/t/p/w1280${details.backdrop_path}` : null,
+            year: (details.release_date || details.first_air_date || '').slice(0, 4),
+            genres: (details.genres || []).map((g) => g.name),
+            voteAverage: details.vote_average ? details.vote_average.toFixed(1) : 'N/A',
+            voteCount: details.vote_count || 0,
+            trailerKey: trailerKey || null,
+            rating: userRatingRow?.rating || null,
+          });
+        }
+
+        // Fallback if not found on TMDB (e.g. non-standard IMDb IDs)
         return res.json({
-          imdbId,
-          tmdbId: tmdbItem.id,
+          imdbId: rawImdbId,
+          tmdbId: null,
           type,
-          title: details.title || details.name || '',
-          overview: details.overview || 'No overview available.',
-          poster: details.poster_path ? `https://image.tmdb.org/t/p/w500${details.poster_path}` : null,
-          backdrop: details.backdrop_path ? `https://image.tmdb.org/t/p/w1280${details.backdrop_path}` : null,
-          year: (details.release_date || details.first_air_date || '').slice(0, 4),
-          genres: (details.genres || []).map((g) => g.name),
-          voteAverage: details.vote_average ? details.vote_average.toFixed(1) : 'N/A',
-          voteCount: details.vote_count || 0,
-          trailerKey: trailerKey || null,
+          title: dbItem?.title || rawImdbId,
+          overview: 'No overview available from TMDB.',
+          poster: dbItem?.poster || null,
+          backdrop: null,
+          year: 'N/A',
+          genres: [],
+          voteAverage: 'N/A',
+          voteCount: 0,
+          trailerKey: null,
           rating: userRatingRow?.rating || null,
         });
       } catch (err) {

@@ -38,11 +38,19 @@ async function tmdbGet(endpoint, params = {}) {
 
 // Stremio/Cinemeta content is keyed by IMDb id. TMDB needs its own numeric id.
 async function findByImdbId(imdbId) {
-  const data = await tmdbGet(`/find/${imdbId}`, { external_source: 'imdb_id' });
-  return {
-    movie: data.movie_results?.[0] || null,
-    tv: data.tv_results?.[0] || null,
-  };
+  const cleanId = String(imdbId || '').split(':')[0];
+  if (!cleanId || !cleanId.startsWith('tt')) {
+    return { movie: null, tv: null };
+  }
+  try {
+    const data = await tmdbGet(`/find/${cleanId}`, { external_source: 'imdb_id' });
+    return {
+      movie: data.movie_results?.[0] || null,
+      tv: data.tv_results?.[0] || null,
+    };
+  } catch (err) {
+    return { movie: null, tv: null };
+  }
 }
 
 // append_to_response=external_ids gives us the imdb_id in one call.
