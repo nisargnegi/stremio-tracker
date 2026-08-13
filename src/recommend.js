@@ -1,13 +1,9 @@
-// recommend.js — run periodically (default: every 6 hours via docker-compose cron).
+// recommend.js — run periodically (default: daily via docker-compose cron).
 //
-// Three-stage recommendation pipeline:
-// 1. GATHER: Pull candidates from TMDB using the user's watch history as seeds
-//    (similar, recommended) plus broad sources (trending, popular, top-rated,
-//    discover by genre). Genre preferences are derived from candidate results
-//    already collected — no extra API round-trips.
-// 2. FILTER: Remove anything the user already has in their items table.
-// 3. RANK: Gemini re-ranks the pool with personalized reasons.
-//    Falls back to DeepSeek, then to vote-average order.
+// Per-Category Recommendation Pipeline:
+// 1. GATHER: Separate 300-item candidate pools for Movies, Series, and Anime.
+// 2. FILTER: Remove anything the user already watched or hidden.
+// 3. RANK: Dedicated DeepSeek AI calls per category (Movies -> 100, Series -> 100, Anime -> 60).
 // Results are cached in recommendations_cache for the addon catalog to read.
 
 require('dotenv').config();
@@ -19,7 +15,6 @@ const { sleep } = tmdb;
 // ---- Helpers ----------------------------------------------------------------
 
 function detectAnime(item) {
-  // genre 16 = Animation; Japanese origin inferred from language or keywords.
   const isAnimation = Array.isArray(item.genre_ids) && item.genre_ids.includes(16);
   const isJapanese =
     item.original_language === 'ja' ||
@@ -37,32 +32,27 @@ function normalizeTitle(t = '') {
     .trim();
 }
 
-// ---- Candidate gathering ----------------------------------------------------
+// ---- Candidate gathering (Per-Category) -------------------------------------
 
-async function gatherCandidates(db, userId) {
-  // Seeds: best-rated / most recently active items in user's library.
-  // Keep total low (15 per type) to control API usage.
-  const getSeeds = (type) =>
-    db.prepare(`
-      SELECT i.imdb_id, i.tmdb_id, i.type, i.title
-      FROM items i
-      LEFT JOIN ratings r ON r.imdb_id = i.imdb_id AND r.user_id = i.user_id
-      WHERE i.user_id = ? AND i.tmdb_id IS NOT NULL AND i.type = ?
-      ORDER BY COALESCE(r.rating, 0) DESC, RANDOM()
-      LIMIT 15
-    `).all(userId, type);
+async function gatherMovieCandidates(db, userId) {
+  const seeds = db.prepare(`
+    SELECT i.imdb_id, i.tmdb_id, i.type, i.title
+    FROM items i
+    LEFT JOIN ratings r ON r.imdb_id = i.imdb_id AND r.user_id = i.user_id
+    WHERE i.user_id = ? AND i.tmdb_id IS NOT NULL AND i.type = 'movie'
+    ORDER BY COALESCE(r.rating, 0) DESC, RANDOM()
+    LIMIT 15
+  `).all(userId);
 
-  const seeds = [...getSeeds('movie'), ...getSeeds('series')];
-  const candidates = new Map(); // tmdbId -> candidate object
-
-  function addResult(r, type, source) {
+  const candidates = new Map();
+  function addResult(r, source) {
     if (!r?.id || candidates.has(r.id)) return;
     candidates.set(r.id, {
       tmdbId: r.id,
-      type,
+      type: 'movie',
       title: r.title || r.name || '',
       poster: r.poster_path ? `https://image.tmdb.org/t/p/w300${r.poster_path}` : null,
-      isAnime: type === 'series' ? detectAnime(r) : false,
+      isAnime: false,
       popularity: r.popularity || 0,
       voteAverage: r.vote_average || 0,
       voteCount: r.vote_count || 0,
@@ -71,183 +61,208 @@ async function gatherCandidates(db, userId) {
     });
   }
 
-  // --- Pass 1: Per-seed recommendations + similar (2 pages each) ---
-  // Batch size 5 with 400ms sleep → stays well under TMDB's 50 req/10s limit.
-  console.log(`[recommend] Seed pass: ${seeds.length} seeds`);
-  const SEED_BATCH = 5;
-  for (let i = 0; i < seeds.length; i += SEED_BATCH) {
-    const batch = seeds.slice(i, i + SEED_BATCH);
+  // Pass 1: Seeds
+  for (let i = 0; i < seeds.length; i += 5) {
+    const batch = seeds.slice(i, i + 5);
     await Promise.all(batch.map(async (seed) => {
       try {
-        const [recs1, sim1] = await Promise.all([
-          tmdb.getRecommendations(seed.tmdb_id, seed.type, 1),
-          tmdb.getSimilar(seed.tmdb_id, seed.type, 1),
+        const [recs, sim] = await Promise.all([
+          tmdb.getRecommendations(seed.tmdb_id, 'movie', 1),
+          tmdb.getSimilar(seed.tmdb_id, 'movie', 1),
         ]);
-        for (const r of [...recs1, ...sim1]) {
-          addResult(r, seed.type, `Because you watched ${seed.title}`);
-        }
-      } catch (err) {
-        console.error(`[recommend] Seed lookup failed for "${seed.title}":`, err.message);
-      }
+        for (const r of [...recs, ...sim]) addResult(r, `Because you watched ${seed.title}`);
+      } catch (_) {}
     }));
-    await sleep(400);
+    await sleep(300);
   }
-  console.log(`[recommend] After seed pass: ${candidates.size} candidates`);
 
-  // --- Pass 2: Genre-aware discover ---
-  // Derive genre preferences from candidates already collected — zero extra
-  // API calls, unlike the previous approach of fetching full show details.
-  const genreCount = { movie: {}, series: {} };
+  // Pass 2: Genre discover
+  const genreCount = {};
   for (const c of candidates.values()) {
-    const bucket = c.type === 'movie' ? genreCount.movie : genreCount.series;
-    for (const gid of (c.genreIds || [])) {
-      bucket[gid] = (bucket[gid] || 0) + 1;
-    }
+    for (const gid of (c.genreIds || [])) genreCount[gid] = (genreCount[gid] || 0) + 1;
   }
-  const topGenres = (bucket, n = 3) =>
-    Object.entries(bucket).sort((a, b) => b[1] - a[1]).slice(0, n).map(([id]) => Number(id));
+  const topGenres = Object.entries(genreCount).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([id]) => Number(id));
 
-  const movieGenres = topGenres(genreCount.movie);
-  const seriesGenres = topGenres(genreCount.series);
-  console.log('[recommend] Top genres — movies:', movieGenres, 'series:', seriesGenres);
-
-  const discoverCalls = [];
-  if (movieGenres.length)  discoverCalls.push(
-    tmdb.discover('movie',  { genreIds: movieGenres,  minVote: 7.0, page: 1 }),
-    tmdb.discover('movie',  { genreIds: movieGenres,  minVote: 7.0, page: 2 }),
-  );
-  if (seriesGenres.length) discoverCalls.push(
-    tmdb.discover('series', { genreIds: seriesGenres, minVote: 7.0, page: 1 }),
-    tmdb.discover('series', { genreIds: seriesGenres, minVote: 7.0, page: 2 }),
-  );
-  // Always add anime discover
-  discoverCalls.push(
-    tmdb.discover('series', { genreIds: [16], language: 'ja', minVote: 7.0, page: 1 }),
-    tmdb.discover('series', { genreIds: [16], language: 'ja', minVote: 7.0, page: 2 }),
-  );
-
-  try {
-    const discoverResults = await Promise.all(discoverCalls);
-    let added = 0;
-    for (const results of discoverResults) {
-      for (const r of results) {
-        const type = r.title ? 'movie' : 'series';
-        if (!candidates.has(r.id)) added++;
-        addResult(r, type, 'Matches your genre preferences');
+  if (topGenres.length) {
+    try {
+      const disc = await Promise.all([
+        tmdb.discover('movie', { genreIds: topGenres, minVote: 6.5, page: 1 }),
+        tmdb.discover('movie', { genreIds: topGenres, minVote: 6.5, page: 2 }),
+      ]);
+      for (const results of disc) {
+        for (const r of results) addResult(r, 'Matches your movie genre taste');
       }
-    }
-    console.log(`[recommend] Discover added ${added} candidates. Total: ${candidates.size}`);
-  } catch (err) {
-    console.error('[recommend] Discover pass failed:', err.message);
+    } catch (_) {}
   }
 
-  await sleep(400);
-
-  // --- Pass 3: Broad sources (trending, popular, top-rated, now-playing) ---
+  // Pass 3: Broad sources
   try {
-    const broadResults = await Promise.all([
-      tmdb.getTrending('movie',  'week', 1),
-      tmdb.getTrending('movie',  'week', 2),
-      tmdb.getTrending('series', 'week', 1),
-      tmdb.getTrending('series', 'week', 2),
-      tmdb.getTopRated('movie',  1),
-      tmdb.getTopRated('movie',  2),
-      tmdb.getTopRated('series', 1),
-      tmdb.getTopRated('series', 2),
-      tmdb.getPopular('movie',   1),
-      tmdb.getPopular('series',  1),
-      tmdb.getNowPlayingOrOnAir('movie',  1),
-      tmdb.getNowPlayingOrOnAir('series', 1),
+    const broad = await Promise.all([
+      tmdb.getTrending('movie', 'week', 1),
+      tmdb.getTrending('movie', 'week', 2),
+      tmdb.getTopRated('movie', 1),
+      tmdb.getTopRated('movie', 2),
+      tmdb.getPopular('movie', 1),
+      tmdb.getNowPlayingOrOnAir('movie', 1),
     ]);
-    let added = 0;
-    for (const results of broadResults) {
-      for (const r of results) {
-        const type = r.title ? 'movie' : 'series';
-        if (!candidates.has(r.id)) added++;
-        addResult(r, type, 'Trending & highly rated');
-      }
+    for (const results of broad) {
+      for (const r of results) addResult(r, 'Popular & Trending Movies');
     }
-    console.log(`[recommend] Broad sources added ${added}. Total: ${candidates.size}`);
-  } catch (err) {
-    console.error('[recommend] Broad sources failed:', err.message);
-  }
+  } catch (_) {}
 
   return [...candidates.values()];
 }
 
-// ---- AI Ranking -------------------------------------------------------------
+async function gatherSeriesCandidates(db, userId) {
+  const seeds = db.prepare(`
+    SELECT i.imdb_id, i.tmdb_id, i.type, i.title
+    FROM items i
+    LEFT JOIN ratings r ON r.imdb_id = i.imdb_id AND r.user_id = i.user_id
+    WHERE i.user_id = ? AND i.tmdb_id IS NOT NULL AND i.type = 'series' AND i.is_anime = 0
+    ORDER BY COALESCE(r.rating, 0) DESC, RANDOM()
+    LIMIT 15
+  `).all(userId);
 
-async function rankWithGemini(candidates, seedTitles) {
-  if (!process.env.GEMINI_API_KEY || candidates.length === 0) return null;
-
-  // Send the top 120 by vote average to stay within token limits.
-  const top = [...candidates]
-    .filter((c) => c.voteCount >= 100 && c.popularity >= 15)
-    .sort((a, b) => b.popularity - a.popularity)
-    .slice(0, 120);
-
-  const prompt = `You are a personalized movie & TV recommendation engine.
-
-The user has watched and enjoyed: ${seedTitles.join(', ')}.
-
-Candidates (title | type):
-${top.map((c) => `${c.title} | ${c.type}`).join('\n')}
-
-Return a JSON array of the top 60 best personalized matches. Each item must have exactly these three fields:
-- "title": exact title from the list above
-- "type": "movie" or "series"
-- "reason": one punchy sentence (max 15 words) explaining why this fits the user's taste (this field is MANDATORY)
-
-Output raw JSON array only — no markdown, no explanation.`;
-
-  const model = process.env.GEMINI_MODEL || 'gemini-2.0-flash-lite';
-
-  try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: 6000, temperature: 0.35, responseMimeType: 'application/json' },
-      }),
+  const candidates = new Map();
+  function addResult(r, source) {
+    if (!r?.id || candidates.has(r.id) || detectAnime(r)) return;
+    candidates.set(r.id, {
+      tmdbId: r.id,
+      type: 'series',
+      title: r.name || r.title || '',
+      poster: r.poster_path ? `https://image.tmdb.org/t/p/w300${r.poster_path}` : null,
+      isAnime: false,
+      popularity: r.popularity || 0,
+      voteAverage: r.vote_average || 0,
+      voteCount: r.vote_count || 0,
+      basedOn: source,
+      genreIds: r.genre_ids || [],
     });
-    const data = await res.json();
-    if (data.error) throw new Error(`Gemini API error: ${data.error.message}`);
-    const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
-    const start = raw.indexOf('[');
-    const end = raw.lastIndexOf(']');
-    if (start === -1 || end === -1) throw new Error('No JSON array in Gemini response');
-    const ranked = JSON.parse(raw.slice(start, end + 1));
-
-    const titleMap = new Map(top.map((c) => [normalizeTitle(c.title), c]));
-    const results = ranked
-      .map((r, i) => {
-        const candidate = titleMap.get(normalizeTitle(r.title));
-        if (!candidate) return null;
-        return { ...candidate, reason: r.reason || r.Reason || r.REASON || '', score: 100 - i };
-      })
-      .filter(Boolean);
-
-    console.log(`[recommend] Gemini ranked ${results.length} items`);
-    return results;
-  } catch (err) {
-    console.error('[recommend] Gemini ranking failed:', err.message);
-    return null;
   }
+
+  // Pass 1: Seeds
+  for (let i = 0; i < seeds.length; i += 5) {
+    const batch = seeds.slice(i, i + 5);
+    await Promise.all(batch.map(async (seed) => {
+      try {
+        const [recs, sim] = await Promise.all([
+          tmdb.getRecommendations(seed.tmdb_id, 'series', 1),
+          tmdb.getSimilar(seed.tmdb_id, 'series', 1),
+        ]);
+        for (const r of [...recs, ...sim]) addResult(r, `Because you watched ${seed.title}`);
+      } catch (_) {}
+    }));
+    await sleep(300);
+  }
+
+  // Pass 2: Genre discover
+  const genreCount = {};
+  for (const c of candidates.values()) {
+    for (const gid of (c.genreIds || [])) genreCount[gid] = (genreCount[gid] || 0) + 1;
+  }
+  const topGenres = Object.entries(genreCount).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([id]) => Number(id));
+
+  if (topGenres.length) {
+    try {
+      const disc = await Promise.all([
+        tmdb.discover('series', { genreIds: topGenres, minVote: 6.5, page: 1 }),
+        tmdb.discover('series', { genreIds: topGenres, minVote: 6.5, page: 2 }),
+      ]);
+      for (const results of disc) {
+        for (const r of results) addResult(r, 'Matches your TV show taste');
+      }
+    } catch (_) {}
+  }
+
+  // Pass 3: Broad sources
+  try {
+    const broad = await Promise.all([
+      tmdb.getTrending('series', 'week', 1),
+      tmdb.getTrending('series', 'week', 2),
+      tmdb.getTopRated('series', 1),
+      tmdb.getTopRated('series', 2),
+      tmdb.getPopular('series', 1),
+      tmdb.getNowPlayingOrOnAir('series', 1),
+    ]);
+    for (const results of broad) {
+      for (const r of results) addResult(r, 'Popular & Trending Series');
+    }
+  } catch (_) {}
+
+  return [...candidates.values()];
 }
 
-async function rankWithDeepSeek(candidates, userPref) {
-  if (!process.env.DEEPSEEK_API_KEY || candidates.length === 0) return null;
+async function gatherAnimeCandidates(db, userId) {
+  const seeds = db.prepare(`
+    SELECT i.imdb_id, i.tmdb_id, i.type, i.title
+    FROM items i
+    LEFT JOIN ratings r ON r.imdb_id = i.imdb_id AND r.user_id = i.user_id
+    WHERE i.user_id = ? AND i.tmdb_id IS NOT NULL AND (i.is_anime = 1 OR i.type = 'series')
+    ORDER BY i.is_anime DESC, COALESCE(r.rating, 0) DESC, RANDOM()
+    LIMIT 10
+  `).all(userId);
+
+  const candidates = new Map();
+  function addResult(r, source) {
+    if (!r?.id || candidates.has(r.id)) return;
+    if (!detectAnime(r) && !Array.isArray(r.genre_ids)?.includes(16)) return;
+    candidates.set(r.id, {
+      tmdbId: r.id,
+      type: 'series',
+      title: r.name || r.title || '',
+      poster: r.poster_path ? `https://image.tmdb.org/t/p/w300${r.poster_path}` : null,
+      isAnime: true,
+      popularity: r.popularity || 0,
+      voteAverage: r.vote_average || 0,
+      voteCount: r.vote_count || 0,
+      basedOn: source,
+      genreIds: r.genre_ids || [],
+    });
+  }
+
+  // Pass 1: Seeds
+  for (let i = 0; i < seeds.length; i += 5) {
+    const batch = seeds.slice(i, i + 5);
+    await Promise.all(batch.map(async (seed) => {
+      try {
+        const [recs, sim] = await Promise.all([
+          tmdb.getRecommendations(seed.tmdb_id, 'series', 1),
+          tmdb.getSimilar(seed.tmdb_id, 'series', 1),
+        ]);
+        for (const r of [...recs, ...sim]) addResult(r, `Because you watched ${seed.title}`);
+      } catch (_) {}
+    }));
+    await sleep(300);
+  }
+
+  // Pass 2: Japanese Anime Discover
+  try {
+    const disc = await Promise.all([
+      tmdb.discover('series', { genreIds: [16], language: 'ja', minVote: 6.8, page: 1 }),
+      tmdb.discover('series', { genreIds: [16], language: 'ja', minVote: 6.8, page: 2 }),
+      tmdb.discover('series', { genreIds: [16], language: 'ja', minVote: 6.8, page: 3 }),
+    ]);
+    for (const results of disc) {
+      for (const r of results) addResult(r, 'Top Rated Anime');
+    }
+  } catch (_) {}
+
+  return [...candidates.values()];
+}
+
+// ---- DeepSeek Channel Ranking -----------------------------------------------
+
+async function rankChannelWithDeepSeek(candidates, categoryName, userPref, targetCount = 100) {
+  if (!process.env.DEEPSEEK_API_KEY || candidates.length === 0) return [];
 
   const top = [...candidates]
-    .filter((c) => c.voteCount >= 100 && c.popularity >= 15)
+    .filter((c) => c.voteCount >= 80 && c.popularity >= 10)
     .sort((a, b) => b.popularity - a.popularity)
-    .slice(0, 300);
+    .slice(0, 250);
 
   const { seedTitles = [], highlyRated = [], disliked = [] } = userPref || {};
 
-  const prompt = `Movie & TV recommendation engine.
+  const prompt = `Dedicated ${categoryName} recommendation engine.
 User watch history includes: ${seedTitles.join(', ')}.
 User highly rated (4-5 stars): ${highlyRated.length ? highlyRated.join(', ') : 'None specified'}.
 User disliked / low rated (1-2 stars): ${disliked.length ? disliked.join(', ') : 'None specified'}.
@@ -255,7 +270,7 @@ User disliked / low rated (1-2 stars): ${disliked.length ? disliked.join(', ') :
 Candidates (title | type):
 ${top.map((c) => `${c.title} | ${c.type}`).join('\n')}
 
-Return JSON array of top 150 recommendations matching the user's taste: [{"title":"...","type":"movie|series","reason":"one short sentence"}]. JSON only.`;
+Return JSON array of top ${targetCount} best ${categoryName} recommendations matching the user's taste: [{"title":"...","type":"movie|series","reason":"one short sentence"}]. JSON only.`;
 
   try {
     const res = await fetch('https://api.deepseek.com/chat/completions', {
@@ -264,14 +279,14 @@ Return JSON array of top 150 recommendations matching the user's taste: [{"title
       body: JSON.stringify({
         model: 'deepseek-chat',
         messages: [{ role: 'user', content: prompt }],
-        max_tokens: 12000,
+        max_tokens: 10000,
       }),
     });
     const data = await res.json();
     const text = data.choices?.[0]?.message?.content || '[]';
     const start = text.indexOf('[');
     const end = text.lastIndexOf(']');
-    if (start === -1 || end === -1) throw new Error('No JSON array in DeepSeek response');
+    if (start === -1 || end === -1) throw new Error(`No JSON array in DeepSeek ${categoryName} response`);
     const ranked = JSON.parse(text.slice(start, end + 1));
 
     const titleMap = new Map(top.map((c) => [normalizeTitle(c.title), c]));
@@ -279,34 +294,24 @@ Return JSON array of top 150 recommendations matching the user's taste: [{"title
       .map((r, i) => {
         const candidate = titleMap.get(normalizeTitle(r.title));
         if (!candidate) return null;
-        return { ...candidate, reason: r.reason || r.Reason || r.REASON || '', score: 150 - i };
+        return { ...candidate, reason: r.reason || r.Reason || r.REASON || '', score: targetCount - i };
       })
       .filter(Boolean);
 
-    console.log(`[recommend] DeepSeek ranked ${results.length} items`);
+    console.log(`[recommend] DeepSeek ranked ${results.length} ${categoryName}`);
     return results;
   } catch (err) {
-    console.error('[recommend] DeepSeek ranking failed:', err.message);
-    return null;
+    console.error(`[recommend] DeepSeek ${categoryName} ranking failed:`, err.message);
+    return [...top].slice(0, targetCount).map((c, i) => ({ ...c, score: -(i + 1) }));
   }
-}
-
-async function rankCandidates(candidates, userPref) {
-  if (candidates.length === 0) return [];
-  return (
-    (await rankWithDeepSeek(candidates, userPref)) ??
-    (await rankWithGemini(candidates, userPref.seedTitles || [])) ??
-    [...candidates].sort((a, b) => b.popularity - a.popularity).map((c, i) => ({ ...c, score: -(i + 1) }))
-  );
 }
 
 // ---- Main run ---------------------------------------------------------------
 
 async function run(userId = 'default') {
-  console.log(`[recommend] ── Starting run for userId="${userId}" ──`);
+  console.log(`[recommend] ── Starting per-category run for userId="${userId}" ──`);
   const db = init();
 
-  // Seed titles for AI context (random sample to keep prompt size reasonable)
   const seedTitles = db.prepare(`
     SELECT title FROM items
     WHERE user_id = ? AND title IS NOT NULL
@@ -323,29 +328,39 @@ async function run(userId = 'default') {
   const highlyRated = ratedRows.filter((r) => r.rating >= 4).map((r) => r.title);
   const disliked = ratedRows.filter((r) => r.rating <= 2).map((r) => r.title);
 
-  console.log(`[recommend] ${seedTitles.length} seed titles, ${highlyRated.length} highly rated, ${disliked.length} disliked`);
-
   const excludedIds = new Set([
     ...db.prepare('SELECT imdb_id FROM items WHERE user_id = ?').all(userId).map((r) => r.imdb_id),
     ...db.prepare('SELECT imdb_id FROM hidden_items WHERE user_id = ?').all(userId).map((r) => r.imdb_id),
   ]);
   console.log(`[recommend] Excluding ${excludedIds.size} items (watched + hidden)`);
 
-  const allCandidates = await gatherCandidates(db, userId);
-  console.log(`[recommend] Total candidate pool: ${allCandidates.length}`);
-
   const userPref = { seedTitles, highlyRated, disliked };
-  const aiRanked = await rankCandidates(allCandidates, userPref);
-  console.log(`[recommend] AI-ranked: ${aiRanked.length}`);
 
-  const aiIds = new Set(aiRanked.map((c) => c.tmdbId));
-  const fallback = allCandidates
-    .filter((c) => !aiIds.has(c.tmdbId) && (c.voteCount >= 100 && c.popularity >= 15))
-    .sort((a, b) => b.popularity - a.popularity)
-    .map((c, i) => ({ ...c, score: -(i + 1) }));
+  // 1. Gather 3 independent candidate pools
+  console.log('[recommend] Gathering Movies candidate pool…');
+  const movieCandidates = await gatherMovieCandidates(db, userId);
+  console.log(`[recommend] Movie candidates: ${movieCandidates.length}`);
 
-  const toCache = [...aiRanked, ...fallback].slice(0, 300);
-  console.log(`[recommend] Resolving IMDb IDs for ${toCache.length} items…`);
+  console.log('[recommend] Gathering Series candidate pool…');
+  const seriesCandidates = await gatherSeriesCandidates(db, userId);
+  console.log(`[recommend] Series candidates: ${seriesCandidates.length}`);
+
+  console.log('[recommend] Gathering Anime candidate pool…');
+  const animeCandidates = await gatherAnimeCandidates(db, userId);
+  console.log(`[recommend] Anime candidates: ${animeCandidates.length}`);
+
+  // 2. Rank each category with DeepSeek independently
+  console.log('[recommend] Ranking Movies with DeepSeek…');
+  const rankedMovies = await rankChannelWithDeepSeek(movieCandidates, 'Movies', userPref, 100);
+
+  console.log('[recommend] Ranking Series with DeepSeek…');
+  const rankedSeries = await rankChannelWithDeepSeek(seriesCandidates, 'TV Series', userPref, 100);
+
+  console.log('[recommend] Ranking Anime with DeepSeek…');
+  const rankedAnime  = await rankChannelWithDeepSeek(animeCandidates, 'Anime', userPref, 60);
+
+  const toCache = [...rankedMovies, ...rankedSeries, ...rankedAnime];
+  console.log(`[recommend] Total ranked recommendations to cache: ${toCache.length}`);
 
   db.prepare('DELETE FROM recommendations_cache WHERE user_id = ?').run(userId);
 
@@ -357,7 +372,6 @@ async function run(userId = 'default') {
       score = excluded.score, reason = excluded.reason, updated_at = datetime('now')
   `);
 
-  // Resolve TMDB IDs -> IMDb IDs in batches; 429 is handled inside tmdb.js.
   let cached = 0;
   const DETAIL_BATCH = 10;
   for (let i = 0; i < toCache.length; i += DETAIL_BATCH) {
@@ -385,13 +399,10 @@ async function run(userId = 'default') {
         console.error(`[recommend] IMDb resolution failed for "${c.title}":`, err.message);
       }
     }));
-    await sleep(400);
+    await sleep(300);
   }
 
-  console.log(
-    `[recommend] ✓ Done. ${cached} cached` +
-    ` (${aiRanked.length} AI-ranked + ${Math.max(0, cached - aiRanked.length)} by vote avg)`
-  );
+  console.log(`[recommend] ✓ Done. ${cached} recommendations cached successfully.`);
 }
 
 if (require.main === module) {
