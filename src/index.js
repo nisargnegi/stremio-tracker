@@ -264,14 +264,52 @@ app.use(`/${SECRET}`, (req, res, next) => {
     return res.json({ ok: true, count: 0 });
   }
 
-  // API: watch history (includes ratings)
+  // API: To-Watch list (Plan to watch)
+  if (url === '/api/towatch' && req.method === 'GET') {
+    try {
+      const rows = db.prepare(`
+        SELECT i.imdb_id, i.type, i.title, i.poster, i.year, i.status, i.is_anime, COALESCE(r.rating, i.rating) as rating
+        FROM items i
+        LEFT JOIN ratings r ON r.imdb_id = i.imdb_id AND r.user_id = i.user_id
+        WHERE i.user_id = 'default' AND i.status = 'to_watch'
+        ORDER BY i.imdb_id DESC
+      `).all();
+      return res.json(rows);
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
+  // API: add item to To-Watch list
+  if (url === '/api/towatch' && req.method === 'POST') {
+    const { imdbId, type, tmdbId, title, year, poster, isAnime } = req.body || {};
+    if (!imdbId || !type) return res.status(400).json({ error: 'imdbId and type required' });
+    try {
+      db.prepare(`
+        INSERT INTO items (imdb_id, user_id, type, tmdb_id, title, year, poster, is_anime, status)
+        VALUES (?, 'default', ?, ?, ?, ?, ?, ?, 'to_watch')
+        ON CONFLICT(imdb_id, user_id) DO UPDATE SET
+          status = 'to_watch',
+          title = COALESCE(excluded.title, items.title),
+          poster = COALESCE(excluded.poster, items.poster),
+          tmdb_id = COALESCE(excluded.tmdb_id, items.tmdb_id)
+      `).run(imdbId, type, tmdbId || null, title || imdbId, year ? parseInt(year, 10) : null, poster || null, isAnime ? 1 : 0);
+
+      db.prepare(`DELETE FROM recommendations_cache WHERE imdb_id = ? AND user_id = 'default'`).run(imdbId);
+      return res.json({ ok: true, message: `Saved to To-Watch list!` });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
+  // API: watch history (completed/watching items)
   if (url === '/api/history' && req.method === 'GET') {
     try {
       const rows = db.prepare(`
         SELECT i.imdb_id, i.type, i.title, i.poster, i.year, i.status, i.is_anime, COALESCE(r.rating, i.rating) as rating
         FROM items i
         LEFT JOIN ratings r ON r.imdb_id = i.imdb_id AND r.user_id = i.user_id
-        WHERE i.user_id = 'default'
+        WHERE i.user_id = 'default' AND (i.status IS NULL OR i.status != 'to_watch')
         ORDER BY i.imdb_id DESC
       `).all();
       return res.json(rows);

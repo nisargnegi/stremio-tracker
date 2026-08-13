@@ -339,14 +339,14 @@
 
     .card-actions {
       display: flex;
-      gap: 6px;
+      gap: 4px;
       margin-top: auto;
     }
 
     .action-btn {
       flex: 1;
-      padding: 7px;
-      font-size: 11px;
+      padding: 6px 4px;
+      font-size: 10px;
       font-weight: 600;
       border-radius: 6px;
       border: 1px solid var(--border);
@@ -354,9 +354,12 @@
       color: var(--text);
       cursor: pointer;
       transition: all 0.18s;
+      white-space: nowrap;
+      text-align: center;
     }
     .action-btn:hover { background: #252a3d; }
     .action-btn-watched:hover { background: var(--success); border-color: var(--success); color: #000; }
+    .action-btn-towatch:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
     .action-btn-dismiss:hover { background: var(--danger); border-color: var(--danger); color: #fff; }
 
     .toast {
@@ -492,7 +495,6 @@
     }
     .modal-trailer-btn:hover { background: #cc0000; }
 
-    /* Search result item styles inside Add Modal */
     .search-result-item {
       display: flex;
       align-items: center;
@@ -553,7 +555,7 @@
         margin-bottom: 6px;
       }
       .star-icon { font-size: 13px; }
-      .action-btn { padding: 5px; font-size: 10px; }
+      .action-btn { padding: 5px 3px; font-size: 9px; }
       .modal-backdrop { height: 140px; }
       .modal-title { font-size: 17px; }
     }
@@ -569,6 +571,7 @@
 
     <div class="nav-tabs">
       <button class="tab-btn active" id="tab-recs" onclick="switchTab('recs', event)">💡 Recommendations (<span id="recs-count">0</span>)</button>
+      <button class="tab-btn" id="tab-towatch" onclick="switchTab('towatch', event)">📌 To Watch (<span id="towatch-count">0</span>)</button>
       <button class="tab-btn" id="tab-history" onclick="switchTab('history', event)">📊 History (<span id="history-count">0</span>)</button>
     </div>
 
@@ -636,6 +639,7 @@
     const API_BASE = `/${SECRET}/api`;
 
     let allRecs    = [];
+    let allToWatch = [];
     let allHistory = [];
     let currentTab    = 'recs';
     let currentFilter = 'all';
@@ -664,15 +668,18 @@
     // ---- Data loading ----
     async function loadData() {
       try {
-        const [recsRes, historyRes] = await Promise.all([
+        const [recsRes, towatchRes, historyRes] = await Promise.all([
           fetch(`${API_BASE}/recommendations`),
+          fetch(`${API_BASE}/towatch`),
           fetch(`${API_BASE}/history`),
         ]);
 
         allRecs    = await recsRes.json();
+        allToWatch = await towatchRes.json();
         allHistory = await historyRes.json();
 
         document.getElementById('recs-count').textContent    = allRecs.length;
+        document.getElementById('towatch-count').textContent = allToWatch.length;
         document.getElementById('history-count').textContent = allHistory.length;
 
         updatePillCounts();
@@ -713,8 +720,14 @@
       return item.type === 'movie' ? 'movie' : 'series';
     }
 
+    function getActiveItems() {
+      if (currentTab === 'recs') return allRecs;
+      if (currentTab === 'towatch') return allToWatch;
+      return allHistory;
+    }
+
     function updatePillCounts() {
-      const items = currentTab === 'recs' ? allRecs : allHistory;
+      const items = getActiveItems();
       const counts = { all: items.length, movie: 0, series: 0, anime: 0 };
       for (const item of items) counts[categorise(item)]++;
       document.getElementById('count-all').textContent    = counts.all;
@@ -728,7 +741,7 @@
       genreBar.innerHTML = `<span class="filter-label">Genre:</span>
         <button class="genre-pill ${currentGenre === 'all' ? 'active' : ''}" onclick="setGenre('all', event)">All Genres</button>`;
 
-      let items = currentTab === 'recs' ? allRecs : allHistory;
+      let items = getActiveItems();
       if (currentFilter !== 'all') {
         items = items.filter(i => categorise(i) === currentFilter);
       }
@@ -773,7 +786,7 @@
           body: JSON.stringify({ imdbId, rating }),
         });
         showToast(`Saved ${rating}-star rating! ⭐`);
-        const item = [...allRecs, ...allHistory].find(i => i.imdb_id === imdbId);
+        const item = [...allRecs, ...allToWatch, ...allHistory].find(i => i.imdb_id === imdbId);
         if (item) {
           item.rating = rating;
           item.impressions = 0;
@@ -789,7 +802,7 @@
       const grid  = document.getElementById('content-grid');
       grid.innerHTML = '';
 
-      let items = currentTab === 'recs' ? allRecs : allHistory;
+      let items = getActiveItems();
 
       if (currentFilter !== 'all') {
         items = items.filter(i => categorise(i) === currentFilter);
@@ -834,10 +847,19 @@
           ? `<button class="hide-btn-overlay" title="Not Interested / Hide" onclick="hideItem('${esc(item.imdb_id)}', '${esc(item.title)}', event)">✕</button>`
           : '';
 
-        const actionsHtml = currentTab === 'recs'
-          ? `<button class="action-btn action-btn-watched" onclick="markWatched('${esc(item.imdb_id)}', '${esc(item.type)}')">✓ Watched</button>
-             <button class="action-btn action-btn-dismiss" onclick="hideItem('${esc(item.imdb_id)}', '${esc(item.title)}', event)">✕ Hide</button>`
-          : `<button class="action-btn action-btn-dismiss" onclick="removeHistory('${esc(item.imdb_id)}')">Remove</button>`;
+        let actionsHtml = '';
+        if (currentTab === 'recs') {
+          actionsHtml = `
+            <button class="action-btn action-btn-watched" onclick="markWatched('${esc(item.imdb_id)}', '${esc(item.type)}')">✓ Watched</button>
+            <button class="action-btn action-btn-towatch" onclick="saveToWatchFromObj('${esc(item.imdb_id)}', '${esc(item.type)}')">📌 To Watch</button>
+            <button class="action-btn action-btn-dismiss" onclick="hideItem('${esc(item.imdb_id)}', '${esc(item.title)}', event)">✕ Hide</button>`;
+        } else if (currentTab === 'towatch') {
+          actionsHtml = `
+            <button class="action-btn action-btn-watched" onclick="markWatched('${esc(item.imdb_id)}', '${esc(item.type)}')">✓ Watched</button>
+            <button class="action-btn action-btn-dismiss" onclick="removeHistory('${esc(item.imdb_id)}')">Remove</button>`;
+        } else {
+          actionsHtml = `<button class="action-btn action-btn-dismiss" onclick="removeHistory('${esc(item.imdb_id)}')">Remove</button>`;
+        }
 
         const seenTagHtml = (currentTab === 'recs' && item.impressions >= 3)
           ? `<div class="seen-tag">👁 Shown ${item.impressions} times</div>`
@@ -896,6 +918,24 @@
       loadData();
     }
 
+    async function saveToWatchFromObj(imdbId, type) {
+      document.getElementById(`card-${imdbId}`)?.remove();
+      const item = [...allRecs, ...allHistory].find(i => i.imdb_id === imdbId) || {};
+      showToast('Saved to To-Watch list!');
+      await fetch(`${API_BASE}/towatch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imdbId,
+          type,
+          title: item.title,
+          poster: item.poster,
+          isAnime: item.is_anime
+        }),
+      });
+      loadData();
+    }
+
     async function hideItem(imdbId, title, event) {
       if (event) event.stopPropagation();
       document.getElementById(`card-${imdbId}`)?.remove();
@@ -913,7 +953,7 @@
 
     async function removeHistory(imdbId) {
       document.getElementById(`card-${imdbId}`)?.remove();
-      showToast('Removed from history');
+      showToast('Removed from list');
       await fetch(`/${SECRET}/mark-watched`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
@@ -995,8 +1035,8 @@
                 <div class="search-result-title">${esc(item.title)}</div>
                 <div class="search-result-meta">${esc(item.year || 'N/A')} • ${badgeLabel}</div>
               </div>
-              <button class="btn" style="padding: 6px 12px; font-size: 12px;" onclick="addToWatchlist('${esc(item.imdbId)}', '${esc(item.type)}', ${item.tmdbId}, '${esc(item.title)}', '${esc(item.year)}', '${esc(item.poster)}', ${item.isAnime})">
-                ➕ Add
+              <button class="btn" style="padding: 6px 12px; font-size: 12px; background: var(--accent);" onclick="addToWatchlist('${esc(item.imdbId)}', '${esc(item.type)}', ${item.tmdbId}, '${esc(item.title)}', '${esc(item.year)}', '${esc(item.poster)}', ${item.isAnime})">
+                📌 To-Watch
               </button>`;
 
             resultsContainer.appendChild(div);
@@ -1009,13 +1049,13 @@
 
     async function addToWatchlist(imdbId, type, tmdbId, title, year, poster, isAnime) {
       try {
-        const res = await fetch(`${API_BASE}/watchlist/add`, {
+        const res = await fetch(`${API_BASE}/towatch`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ imdbId, type, tmdbId, title, year, poster, isAnime }),
         });
         const data = await res.json();
-        showToast(data.message || 'Added to Watchlist!');
+        showToast(data.message || 'Saved to To-Watch list!');
         closeAddModal();
         loadData();
       } catch (err) {
@@ -1079,8 +1119,9 @@
               ${renderStarsHtml(imdbId, data.rating || 0)}
             </div>
 
-            <div style="display: flex; gap: 12px; align-items: center; margin-top: 8px;">
+            <div style="display: flex; gap: 10px; align-items: center; margin-top: 8px; flex-wrap: wrap;">
               ${trailerButton}
+              <button class="btn" style="background: var(--accent); color: #fff;" onclick="saveToWatchFromObj('${esc(imdbId)}', '${esc(type)}'); closeModal();">📌 Save to To-Watch</button>
               <button class="btn" style="background: var(--success); color: #000;" onclick="markWatched('${esc(imdbId)}', '${esc(type)}'); closeModal();">✓ Mark Watched</button>
             </div>
           </div>`;
