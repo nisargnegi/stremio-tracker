@@ -66,7 +66,6 @@
       font-size: 16px;
     }
 
-    /* Main nav tabs: Recommendations / History */
     .nav-tabs {
       display: flex;
       background: #0b0c10;
@@ -120,19 +119,19 @@
       padding: 0 24px;
     }
 
-    /* Type filter pills */
     .filter-bar {
       display: flex;
       align-items: center;
       gap: 8px;
-      margin-bottom: 18px;
+      margin-bottom: 12px;
       flex-wrap: wrap;
     }
     .filter-label {
       font-size: 12px;
       color: var(--text-muted);
-      font-weight: 500;
+      font-weight: 600;
       margin-right: 4px;
+      min-width: 50px;
     }
     .filter-pill {
       background: var(--card-bg);
@@ -155,6 +154,24 @@
     .filter-pill.active.fp-movie  { background: var(--movie-color); color: #000; }
     .filter-pill.active.fp-series { background: var(--series-color); }
     .filter-pill.active.fp-anime  { background: var(--anime-color); }
+
+    .genre-bar {
+      margin-bottom: 18px;
+    }
+    .genre-pill {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      padding: 4px 12px;
+      border-radius: 16px;
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.18s;
+      white-space: nowrap;
+    }
+    .genre-pill:hover { border-color: #383e56; color: var(--text); }
+    .genre-pill.active { background: var(--accent); color: #fff; border-color: transparent; }
 
     .pill-count {
       background: rgba(255,255,255,0.15);
@@ -185,7 +202,6 @@
     }
     .search-input:focus { border-color: var(--accent); }
 
-    /* Grid & Cards */
     .grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
@@ -246,7 +262,6 @@
     .badge-movie  { background: rgba(46, 213, 115, 0.9); color: #000; }
     .badge-series { background: rgba(124, 92, 255, 0.9); }
 
-    /* Hide button on top-left overlay */
     .hide-btn-overlay {
       position: absolute;
       top: 8px;
@@ -298,7 +313,14 @@
       font-style: italic;
     }
 
-    /* 5-Star Rating Component */
+    .seen-tag {
+      font-size: 10px;
+      color: #ff9f43;
+      font-weight: 500;
+      margin-top: 2px;
+      font-style: normal;
+    }
+
     .star-rating {
       display: inline-flex;
       align-items: center;
@@ -337,7 +359,6 @@
     .action-btn-watched:hover { background: var(--success); border-color: var(--success); color: #000; }
     .action-btn-dismiss:hover { background: var(--danger); border-color: var(--danger); color: #fff; }
 
-    /* Toast */
     .toast {
       position: fixed;
       bottom: 24px;
@@ -374,7 +395,6 @@
     .empty-state .empty-msg { font-size: 14px; }
     .status-text { font-size: 12px; color: var(--text-muted); }
 
-    /* Detail Modal */
     .modal-overlay {
       position: fixed;
       top: 0; left: 0; width: 100%; height: 100%;
@@ -472,7 +492,6 @@
     }
     .modal-trailer-btn:hover { background: #cc0000; }
 
-    /* Mobile Responsive Layout (Phones < 600px) */
     @media (max-width: 600px) {
       header { padding: 10px 14px; }
       main { padding: 0 12px; margin: 14px auto; }
@@ -527,11 +546,18 @@
   <main>
     <!-- Type filter pills -->
     <div class="filter-bar" id="filter-bar">
-      <span class="filter-label">Filter:</span>
+      <span class="filter-label">Type:</span>
       <button class="filter-pill fp-all active" id="pill-all"    onclick="setFilter('all',    event)">All <span class="pill-count" id="count-all">0</span></button>
       <button class="filter-pill fp-movie"      id="pill-movie"  onclick="setFilter('movie',  event)">🎬 Movies <span class="pill-count" id="count-movie">0</span></button>
       <button class="filter-pill fp-series"     id="pill-series" onclick="setFilter('series', event)">📺 Series <span class="pill-count" id="count-series">0</span></button>
       <button class="filter-pill fp-anime"      id="pill-anime"  onclick="setFilter('anime',  event)">🌸 Anime <span class="pill-count" id="count-anime">0</span></button>
+    </div>
+
+    <!-- Dynamic Genre filter pills -->
+    <div class="filter-bar genre-bar" id="genre-bar">
+      <span class="filter-label">Genre:</span>
+      <button class="genre-pill active" id="genre-pill-all" onclick="setGenre('all', event)">All Genres</button>
+      <!-- Populated dynamically -->
     </div>
 
     <div class="toolbar">
@@ -562,6 +588,8 @@
     let allHistory = [];
     let currentTab    = 'recs';
     let currentFilter = 'all';
+    let currentGenre  = 'all';
+    const pingedInSession = new Set();
 
     function esc(str) {
       if (!str) return '';
@@ -596,6 +624,7 @@
         document.getElementById('history-count').textContent = allHistory.length;
 
         updatePillCounts();
+        renderGenrePills();
         renderGrid();
       } catch (err) {
         showToast('Failed to load data: ' + err.message);
@@ -604,15 +633,25 @@
 
     function switchTab(tab, e) {
       currentTab = tab;
+      currentGenre = 'all';
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       if (e && e.target) e.target.classList.add('active');
       updatePillCounts();
+      renderGenrePills();
       renderGrid();
     }
 
     function setFilter(filter, e) {
       currentFilter = filter;
       document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+      if (e && e.target) e.target.classList.add('active');
+      renderGenrePills();
+      renderGrid();
+    }
+
+    function setGenre(genre, e) {
+      currentGenre = genre;
+      document.querySelectorAll('.genre-pill').forEach(p => p.classList.remove('active'));
       if (e && e.target) e.target.classList.add('active');
       renderGrid();
     }
@@ -632,7 +671,38 @@
       document.getElementById('count-anime').textContent  = counts.anime;
     }
 
-    // ---- Interactive Star Rating Helper ----
+    function renderGenrePills() {
+      const genreBar = document.getElementById('genre-bar');
+      genreBar.innerHTML = `<span class="filter-label">Genre:</span>
+        <button class="genre-pill ${currentGenre === 'all' ? 'active' : ''}" onclick="setGenre('all', event)">All Genres</button>`;
+
+      let items = currentTab === 'recs' ? allRecs : allHistory;
+      if (currentFilter !== 'all') {
+        items = items.filter(i => categorise(i) === currentFilter);
+      }
+
+      const genreMap = {};
+      for (const item of items) {
+        if (!item.genres) continue;
+        const gList = item.genres.split(',').map(g => g.trim()).filter(Boolean);
+        for (const g of gList) {
+          genreMap[g] = (genreMap[g] || 0) + 1;
+        }
+      }
+
+      const sortedGenres = Object.entries(genreMap)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 15);
+
+      for (const [gName, count] of sortedGenres) {
+        const btn = document.createElement('button');
+        btn.className = `genre-pill ${currentGenre === gName ? 'active' : ''}`;
+        btn.innerHTML = `${esc(gName)} <span style="opacity: 0.6; font-size: 10px;">(${count})</span>`;
+        btn.onclick = (e) => setGenre(gName, e);
+        genreBar.appendChild(btn);
+      }
+    }
+
     function renderStarsHtml(imdbId, currentRating = 0) {
       let stars = '';
       for (let i = 1; i <= 5; i++) {
@@ -651,17 +721,17 @@
           body: JSON.stringify({ imdbId, rating }),
         });
         showToast(`Saved ${rating}-star rating! ⭐`);
-        
-        // Update local object
         const item = [...allRecs, ...allHistory].find(i => i.imdb_id === imdbId);
-        if (item) item.rating = rating;
+        if (item) {
+          item.rating = rating;
+          item.impressions = 0;
+        }
         renderGrid();
       } catch (err) {
         showToast('Failed to save rating: ' + err.message);
       }
     }
 
-    // ---- Grid rendering ----
     function renderGrid() {
       const query = document.getElementById('search-box').value.toLowerCase();
       const grid  = document.getElementById('content-grid');
@@ -671,6 +741,10 @@
 
       if (currentFilter !== 'all') {
         items = items.filter(i => categorise(i) === currentFilter);
+      }
+
+      if (currentGenre !== 'all') {
+        items = items.filter(i => i.genres && i.genres.toLowerCase().includes(currentGenre.toLowerCase()));
       }
 
       if (query) {
@@ -688,7 +762,10 @@
 
       document.getElementById('status-info').textContent = `Showing ${items.length} item${items.length !== 1 ? 's' : ''}`;
 
-      for (const item of items) {
+      const visibleIdsToPing = [];
+
+      for (let index = 0; index < items.length; index++) {
+        const item = items[index];
         const cat = categorise(item);
         const badgeClass = cat === 'anime' ? 'badge-anime' : (cat === 'movie' ? 'badge-movie' : 'badge-series');
         const badgeLabel = cat === 'anime' ? 'Anime' : (cat === 'movie' ? 'Movie' : 'Series');
@@ -710,8 +787,12 @@
              <button class="action-btn action-btn-dismiss" onclick="hideItem('${esc(item.imdb_id)}', '${esc(item.title)}', event)">✕ Hide</button>`
           : `<button class="action-btn action-btn-dismiss" onclick="removeHistory('${esc(item.imdb_id)}')">Remove</button>`;
 
+        const seenTagHtml = (currentTab === 'recs' && item.impressions >= 3)
+          ? `<div class="seen-tag">👁 Shown ${item.impressions} times</div>`
+          : '';
+
         const reasonHtml = currentTab === 'recs'
-          ? `<div class="card-reason">${esc(item.reason) || 'Recommended based on your watch history'}</div>`
+          ? `<div class="card-reason">${esc(item.reason) || 'Recommended based on your watch history'}${seenTagHtml}</div>`
           : '';
 
         const starWidgetHtml = renderStarsHtml(item.imdb_id, item.rating || 0);
@@ -730,10 +811,28 @@
           </div>`;
 
         grid.appendChild(card);
+
+        if (currentTab === 'recs' && index < 30 && !pingedInSession.has(item.imdb_id)) {
+          visibleIdsToPing.push(item.imdb_id);
+          pingedInSession.add(item.imdb_id);
+        }
+      }
+
+      if (visibleIdsToPing.length > 0) {
+        sendImpressionPing(visibleIdsToPing);
       }
     }
 
-    // ---- Actions ----
+    async function sendImpressionPing(imdbIds) {
+      try {
+        await fetch(`${API_BASE}/impression`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imdbIds }),
+        });
+      } catch (_) {}
+    }
+
     async function markWatched(imdbId, type) {
       document.getElementById(`card-${imdbId}`)?.remove();
       showToast('Marked as watched!');
@@ -756,6 +855,7 @@
         body: JSON.stringify({ imdbId, title }),
       });
       updatePillCounts();
+      renderGenrePills();
       renderGrid();
     }
 
@@ -788,7 +888,6 @@
       }
     }
 
-    // ---- Detail Modal ----
     async function openDetailModal(imdbId, type) {
       const modal = document.getElementById('detail-modal');
       const inner = document.getElementById('modal-inner');
@@ -865,7 +964,6 @@
       if (e.target.id === 'detail-modal') closeModal();
     }
 
-    // ---- Boot ----
     loadData();
   </script>
 </body>

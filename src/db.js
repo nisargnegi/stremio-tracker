@@ -99,15 +99,23 @@ function init() {
 
   try {
     db.prepare("ALTER TABLE items ADD COLUMN is_anime INTEGER DEFAULT 0").run();
-  } catch (_) {
-    // Ignore error if column already exists
-  }
+  } catch (_) {}
 
   try {
     db.prepare("ALTER TABLE items ADD COLUMN rating INTEGER").run();
-  } catch (_) {
-    // Ignore error if column already exists
-  }
+  } catch (_) {}
+
+  try {
+    db.prepare("ALTER TABLE recommendations_cache ADD COLUMN genres TEXT").run();
+  } catch (_) {}
+
+  try {
+    db.prepare("ALTER TABLE recommendations_cache ADD COLUMN impressions INTEGER DEFAULT 0").run();
+  } catch (_) {}
+
+  try {
+    db.prepare("ALTER TABLE recommendations_cache ADD COLUMN last_seen TEXT").run();
+  } catch (_) {}
 
   return db;
 }

@@ -161,19 +161,42 @@ app.use(`/${SECRET}`, (req, res, next) => {
     }
   }
 
-  // API: list recommendations
+  // API: list recommendations (sorted by score minus impression penalty)
   if (url === '/api/recommendations' && req.method === 'GET') {
     try {
       const rows = db.prepare(`
-        SELECT imdb_id, type, title, poster, is_anime, score, reason, updated_at
+        SELECT imdb_id, type, title, poster, is_anime, score, reason, genres, COALESCE(impressions, 0) as impressions, updated_at,
+               (score - (COALESCE(impressions, 0) * 2.5)) AS final_score
         FROM recommendations_cache
         WHERE user_id = 'default'
-        ORDER BY score DESC
+        ORDER BY final_score DESC
       `).all();
       return res.json(rows);
     } catch (err) {
       return res.status(500).json({ error: err.message });
     }
+  }
+
+  // API: record impressions for visible recommendation cards
+  if (url === '/api/impression' && req.method === 'POST') {
+    const { imdbIds } = req.body || {};
+    if (Array.isArray(imdbIds) && imdbIds.length > 0) {
+      try {
+        const stmt = db.prepare(`
+          UPDATE recommendations_cache
+          SET impressions = COALESCE(impressions, 0) + 1, last_seen = datetime('now')
+          WHERE imdb_id = ? AND user_id = 'default'
+        `);
+        const transaction = db.transaction((ids) => {
+          for (const id of ids) stmt.run(id);
+        });
+        transaction(imdbIds.slice(0, 30));
+        return res.json({ ok: true, count: imdbIds.length });
+      } catch (err) {
+        return res.status(500).json({ error: err.message });
+      }
+    }
+    return res.json({ ok: true, count: 0 });
   }
 
   // API: watch history (includes ratings)
@@ -209,7 +232,7 @@ app.use(`/${SECRET}`, (req, res, next) => {
     }
   }
 
-  // API: rate an item (1-5 stars)
+  // API: rate an item (1-5 stars) — also resets impressions
   if (url === '/api/rate' && req.method === 'POST') {
     const { imdbId, rating } = req.body || {};
     if (!imdbId || typeof rating !== 'number') return res.status(400).json({ error: 'imdbId and rating (1-5) required' });
@@ -221,6 +244,7 @@ app.use(`/${SECRET}`, (req, res, next) => {
         ON CONFLICT(user_id, imdb_id) DO UPDATE SET rating = excluded.rating, rated_at = datetime('now')
       `).run(imdbId, score);
       db.prepare(`UPDATE items SET rating = ? WHERE imdb_id = ? AND user_id = 'default'`).run(score, imdbId);
+      db.prepare(`UPDATE recommendations_cache SET impressions = 0 WHERE imdb_id = ? AND user_id = 'default'`).run(imdbId);
       return res.json({ ok: true, imdbId, rating: score });
     } catch (err) {
       return res.status(500).json({ error: err.message });
