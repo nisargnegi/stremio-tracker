@@ -18,6 +18,7 @@ const { addonBuilder, getRouter } = require('stremio-addon-sdk');
 const { init } = require('./db');
 const { logStreamRequest } = require('./watchTracker');
 const recommend = require('./recommend');
+const tmdb = require('./tmdb');
 
 const db = init();
 
