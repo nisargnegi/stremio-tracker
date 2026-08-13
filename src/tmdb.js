@@ -131,6 +131,16 @@ async function getVideos(tmdbId, type) {
   }
 }
 
+async function searchMulti(query) {
+  if (!query || !query.trim()) return [];
+  try {
+    const data = await tmdbGet('/search/multi', { query: query.trim() });
+    return (data.results || []).filter((r) => r.media_type === 'movie' || r.media_type === 'tv').slice(0, 10);
+  } catch (err) {
+    return [];
+  }
+}
+
 module.exports = {
   findByImdbId,
   getShowDetails,
@@ -143,5 +153,6 @@ module.exports = {
   getNowPlayingOrOnAir,
   discover,
   getVideos,
+  searchMulti,
   sleep,
 };

@@ -93,7 +93,7 @@
     .header-actions {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
     }
 
     .btn {
@@ -492,6 +492,42 @@
     }
     .modal-trailer-btn:hover { background: #cc0000; }
 
+    /* Search result item styles inside Add Modal */
+    .search-result-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: #10121a;
+      border: 1px solid var(--border);
+      padding: 10px;
+      border-radius: 10px;
+    }
+    .search-result-poster {
+      width: 44px;
+      height: 64px;
+      object-fit: cover;
+      border-radius: 6px;
+      background: var(--card-bg);
+      flex-shrink: 0;
+    }
+    .search-result-info {
+      flex: 1;
+      overflow: hidden;
+    }
+    .search-result-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #fff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .search-result-meta {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 3px;
+    }
+
     @media (max-width: 600px) {
       header { padding: 10px 14px; }
       main { padding: 0 12px; margin: 14px auto; }
@@ -537,6 +573,9 @@
     </div>
 
     <div class="header-actions">
+      <button class="btn" style="background: var(--success); color: #000;" onclick="openAddTitleModal()">
+        <span>➕</span> Add Title
+      </button>
       <button class="btn" id="refresh-btn" onclick="triggerRefresh()">
         <span>🔄</span> Refresh
       </button>
@@ -578,6 +617,18 @@
     </div>
   </div>
 
+  <!-- Add Title Modal -->
+  <div class="modal-overlay" id="add-title-modal" onclick="closeAddModalOnOverlay(event)">
+    <div class="modal-card" style="max-width: 580px; padding: 24px;">
+      <button class="modal-close-btn" onclick="closeAddModal()">✕</button>
+      <h3 style="color: #fff; font-size: 18px; margin-bottom: 14px;">➕ Add Title to Watchlist</h3>
+      <input type="text" class="search-input" id="add-search-box" style="width: 100%; margin-bottom: 16px;" placeholder="Search TMDB for movies, series, or anime..." oninput="debouncedSearchTitles()">
+      <div id="add-search-results" style="display: flex; flex-direction: column; gap: 10px; max-height: 400px; overflow-y: auto;">
+        <div style="color: var(--text-muted); font-size: 13px; text-align: center; padding: 20px;">Type a title above to search TMDB...</div>
+      </div>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
   <script>
@@ -590,6 +641,7 @@
     let currentFilter = 'all';
     let currentGenre  = 'all';
     const pingedInSession = new Set();
+    let searchDebounceTimer = null;
 
     function esc(str) {
       if (!str) return '';
@@ -888,6 +940,90 @@
       }
     }
 
+    // ---- Add Title Modal & Search ----
+    function openAddTitleModal() {
+      document.getElementById('add-title-modal').classList.add('active');
+      document.getElementById('add-search-box').focus();
+    }
+
+    function closeAddModal() {
+      document.getElementById('add-title-modal').classList.remove('active');
+    }
+
+    function closeAddModalOnOverlay(e) {
+      if (e.target.id === 'add-title-modal') closeAddModal();
+    }
+
+    function debouncedSearchTitles() {
+      clearTimeout(searchDebounceTimer);
+      const query = document.getElementById('add-search-box').value.trim();
+      const resultsContainer = document.getElementById('add-search-results');
+
+      if (!query) {
+        resultsContainer.innerHTML = `<div style="color: var(--text-muted); font-size: 13px; text-align: center; padding: 20px;">Type a title above to search TMDB...</div>`;
+        return;
+      }
+
+      resultsContainer.innerHTML = `<div style="text-align: center; padding: 20px; color: var(--text-muted);"><div class="spinner" style="margin: 0 auto 8px;"></div> Searching...</div>`;
+
+      searchDebounceTimer = setTimeout(async () => {
+        try {
+          const res = await fetch(`${API_BASE}/search?q=${encodeURIComponent(query)}`);
+          if (!res.ok) throw new Error('Search failed');
+          const data = await res.json();
+
+          if (data.length === 0) {
+            resultsContainer.innerHTML = `<div style="color: var(--text-muted); font-size: 13px; text-align: center; padding: 20px;">No results found on TMDB.</div>`;
+            return;
+          }
+
+          resultsContainer.innerHTML = '';
+          for (const item of data) {
+            const div = document.createElement('div');
+            div.className = 'search-result-item';
+
+            const posterSrc = item.poster ? esc(item.poster) : '';
+            const posterHtml = posterSrc
+              ? `<img src="${posterSrc}" class="search-result-poster" alt="${esc(item.title)}">`
+              : `<div class="search-result-poster" style="display:flex;align-items:center;justify-content:center;">🎬</div>`;
+
+            const badgeLabel = item.isAnime ? 'Anime' : (item.type === 'movie' ? 'Movie' : 'Series');
+
+            div.innerHTML = `
+              ${posterHtml}
+              <div class="search-result-info">
+                <div class="search-result-title">${esc(item.title)}</div>
+                <div class="search-result-meta">${esc(item.year || 'N/A')} • ${badgeLabel}</div>
+              </div>
+              <button class="btn" style="padding: 6px 12px; font-size: 12px;" onclick="addToWatchlist('${esc(item.imdbId)}', '${esc(item.type)}', ${item.tmdbId}, '${esc(item.title)}', '${esc(item.year)}', '${esc(item.poster)}', ${item.isAnime})">
+                ➕ Add
+              </button>`;
+
+            resultsContainer.appendChild(div);
+          }
+        } catch (err) {
+          resultsContainer.innerHTML = `<div style="color: var(--danger); font-size: 13px; text-align: center; padding: 20px;">Error searching: ${esc(err.message)}</div>`;
+        }
+      }, 300);
+    }
+
+    async function addToWatchlist(imdbId, type, tmdbId, title, year, poster, isAnime) {
+      try {
+        const res = await fetch(`${API_BASE}/watchlist/add`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imdbId, type, tmdbId, title, year, poster, isAnime }),
+        });
+        const data = await res.json();
+        showToast(data.message || 'Added to Watchlist!');
+        closeAddModal();
+        loadData();
+      } catch (err) {
+        showToast('Failed to add title: ' + err.message);
+      }
+    }
+
+    // ---- Detail Modal ----
     async function openDetailModal(imdbId, type) {
       const modal = document.getElementById('detail-modal');
       const inner = document.getElementById('modal-inner');

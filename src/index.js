@@ -177,6 +177,71 @@ app.use(`/${SECRET}`, (req, res, next) => {
     }
   }
 
+  // API: TMDB search for adding titles to watchlist
+  if (url.startsWith('/api/search') && req.method === 'GET') {
+    const query = new URL(`http://localhost${url}`).searchParams.get('q') || '';
+    if (!query.trim()) return res.json([]);
+    (async () => {
+      try {
+        const rawResults = await tmdb.searchMulti(query);
+        const resolved = await Promise.all(
+          rawResults.map(async (r) => {
+            try {
+              const details = r.media_type === 'movie'
+                ? await tmdb.getMovieDetails(r.id)
+                : await tmdb.getShowDetails(r.id);
+              const imdbId = details.external_ids?.imdb_id || details.imdb_id;
+              if (!imdbId) return null;
+
+              const genreIds = details.genres?.map((g) => g.id) || r.genre_ids || [];
+              const isAnime = r.media_type === 'tv' && (
+                genreIds.includes(16) && (details.original_language === 'ja' || (Array.isArray(details.origin_country) && details.origin_country.includes('JP')))
+              );
+
+              return {
+                imdbId,
+                tmdbId: r.id,
+                type: r.media_type === 'movie' ? 'movie' : 'series',
+                title: details.title || details.name || r.title || r.name || '',
+                year: (details.release_date || details.first_air_date || '').slice(0, 4),
+                poster: details.poster_path ? `https://image.tmdb.org/t/p/w300${details.poster_path}` : null,
+                isAnime: isAnime ? 1 : 0,
+              };
+            } catch (_) {
+              return null;
+            }
+          })
+        );
+        return res.json(resolved.filter(Boolean));
+      } catch (err) {
+        return res.status(500).json({ error: err.message });
+      }
+    })();
+    return;
+  }
+
+  // API: manually add title to watchlist / tracking list
+  if (url === '/api/watchlist/add' && req.method === 'POST') {
+    const { imdbId, type, tmdbId, title, year, poster, isAnime } = req.body || {};
+    if (!imdbId || !type) return res.status(400).json({ error: 'imdbId and type required' });
+    try {
+      db.prepare(`
+        INSERT INTO items (imdb_id, user_id, type, tmdb_id, title, year, poster, is_anime, status)
+        VALUES (?, 'default', ?, ?, ?, ?, ?, ?, 'watching')
+        ON CONFLICT(imdb_id, user_id) DO UPDATE SET
+          status = 'watching',
+          title = COALESCE(excluded.title, items.title),
+          poster = COALESCE(excluded.poster, items.poster),
+          tmdb_id = COALESCE(excluded.tmdb_id, items.tmdb_id)
+      `).run(imdbId, type, tmdbId || null, title || imdbId, year ? parseInt(year, 10) : null, poster || null, isAnime ? 1 : 0);
+
+      db.prepare(`DELETE FROM recommendations_cache WHERE imdb_id = ? AND user_id = 'default'`).run(imdbId);
+      return res.json({ ok: true, message: `"${title || imdbId}" added to Watchlist!` });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
   // API: record impressions for visible recommendation cards
   if (url === '/api/impression' && req.method === 'POST') {
     const { imdbIds } = req.body || {};
