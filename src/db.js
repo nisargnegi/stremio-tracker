@@ -120,7 +120,7 @@ function init() {
   // Additive migrations preserve existing libraries and saved feedback.
   db.transaction(() => {
     const additions = {
-      ratings: { rating_scale: 'INTEGER' },
+      ratings: { rating_scale: 'INTEGER', title: 'TEXT', type: 'TEXT', is_anime: 'INTEGER', tmdb_id: 'INTEGER' },
       recommendations_cache: { tmdb_id: 'INTEGER', release_year: 'INTEGER', impression_days: 'INTEGER DEFAULT 0' },
       hidden_items: { reason: "TEXT DEFAULT 'not_interested'", type: 'TEXT', is_anime: 'INTEGER', genres: 'TEXT', tmdb_id: 'INTEGER' },
     };

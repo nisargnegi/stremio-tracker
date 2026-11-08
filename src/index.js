@@ -18,7 +18,7 @@ const { addonBuilder, getRouter } = require('stremio-addon-sdk');
 const { init } = require('./db');
 const { logStreamRequest } = require('./watchTracker');
 const recommend = require('./recommend');
-const { DISMISSAL_REASONS, IMPRESSION_PENALTY, recordImpressions, dismissRecommendation } = require('./recommendationFeedback');
+const { DISMISSAL_REASONS, IMPRESSION_PENALTY, recordImpressions, dismissRecommendation, recordRating } = require('./recommendationFeedback');
 const tmdb = require('./tmdb');
 
 const db = init();
@@ -330,11 +330,7 @@ app.use(`/${SECRET}`, (req, res, next) => {
     if (!imdbId || typeof rating !== 'number') return res.status(400).json({ error: 'imdbId and rating (1-5) required' });
     const score = Math.max(1, Math.min(5, Math.round(rating)));
     try {
-      db.prepare(`
-        INSERT INTO ratings (user_id, imdb_id, rating, rated_at, rating_scale)
-        VALUES ('default', ?, ?, datetime('now'), 5)
-        ON CONFLICT(user_id, imdb_id) DO UPDATE SET rating = excluded.rating, rated_at = datetime('now'), rating_scale = 5
-      `).run(imdbId, score);
+      recordRating(db, 'default', imdbId, score);
       db.prepare(`UPDATE items SET rating = ? WHERE imdb_id = ? AND user_id = 'default'`).run(score, imdbId);
       db.prepare(`UPDATE recommendations_cache SET impressions = 0, impression_days = 0, last_seen = NULL WHERE imdb_id = ? AND user_id = 'default'`).run(imdbId);
       return res.json({ ok: true, imdbId, rating: score });
@@ -514,11 +510,7 @@ app.post(`/${SECRET}/mark-watched`, (req, res) => {
       ON CONFLICT(imdb_id, user_id) DO UPDATE SET status = 'completed', rating = COALESCE(excluded.rating, items.rating)
     `).run(imdbId, type, score);
     if (score) {
-      db.prepare(`
-        INSERT INTO ratings (user_id, imdb_id, rating, rated_at, rating_scale)
-        VALUES ('default', ?, ?, datetime('now'), 5)
-        ON CONFLICT(user_id, imdb_id) DO UPDATE SET rating = excluded.rating, rated_at = datetime('now'), rating_scale = 5
-      `).run(imdbId, score);
+      recordRating(db, 'default', imdbId, score);
     }
     db.prepare(`
       INSERT INTO watched (user_id, imdb_id, type, source)

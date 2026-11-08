@@ -29,4 +29,19 @@ function dismissRecommendation(db, userId, imdbId, title, reason = 'not_interest
   })();
 }
 
-module.exports = { DISMISSAL_REASONS, IMPRESSION_PENALTY, recordImpressions, dismissRecommendation };
+function recordRating(db, userId, imdbId, rating) {
+  const metadata = db.prepare(`SELECT title, type, is_anime, tmdb_id FROM recommendations_cache
+    WHERE user_id = ? AND imdb_id = ? UNION ALL
+    SELECT title, type, is_anime, tmdb_id FROM items WHERE user_id = ? AND imdb_id = ? LIMIT 1`)
+    .get(userId, imdbId, userId, imdbId) || {};
+  db.prepare(`INSERT INTO ratings (user_id, imdb_id, rating, rated_at, rating_scale, title, type, is_anime, tmdb_id)
+    VALUES (?, ?, ?, datetime('now'), 5, ?, ?, ?, ?)
+    ON CONFLICT(user_id, imdb_id) DO UPDATE SET rating = excluded.rating,
+      rated_at = excluded.rated_at, rating_scale = 5, title = COALESCE(excluded.title, ratings.title),
+      type = COALESCE(excluded.type, ratings.type), is_anime = COALESCE(excluded.is_anime, ratings.is_anime),
+      tmdb_id = COALESCE(excluded.tmdb_id, ratings.tmdb_id)`)
+    .run(userId, imdbId, rating, metadata.title || null, metadata.type || null,
+      metadata.is_anime ?? null, metadata.tmdb_id || null);
+}
+
+module.exports = { DISMISSAL_REASONS, IMPRESSION_PENALTY, recordImpressions, dismissRecommendation, recordRating };

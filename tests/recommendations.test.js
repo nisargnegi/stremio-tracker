@@ -109,11 +109,13 @@ const tmdb = require('../src/tmdb');
 tmdb.sleep = async () => {};
 let aiResponse = [];
 let aiCandidates = [];
+let onAiResponse = () => {};
 const fetchFile = require.resolve('node-fetch');
 require.cache[fetchFile].exports = async (url, options) => {
   const prompt = JSON.parse(options.body).messages[0].content;
   const encoded = prompt.split('Candidates (JSON):\n')[1].split('\nReturn a JSON')[0];
   aiCandidates.push(...JSON.parse(encoded));
+  onAiResponse();
   return { ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify(aiResponse) } }] }) };
 };
 const recommend = require('../src/recommend');
@@ -191,4 +193,44 @@ test('HTTP feedback and impression entry points preserve legacy callers', async 
     child.kill('SIGTERM');
     await new Promise(resolve => child.once('exit', resolve));
   }
+});
+
+test('ratings on recommendation cards retain their taste metadata after cache replacement', () => {
+  const db = emptyDb(); cached(db);
+  feedback.recordRating(db, 'default', 'tt1', 5);
+  db.prepare('DELETE FROM recommendations_cache').run();
+  const row = db.prepare('SELECT * FROM ratings').get();
+  assert.equal(row.title, 'Example'); assert.equal(row.type, 'movie'); assert.equal(row.tmdb_id, 1);
+  assert.equal(row.rating_scale, 5);
+  const profile = policy.tasteProfile([{ ...row, status: 'rated' }], [], 'Movies');
+  assert.deepEqual(profile.highlyRated, ['Example']);
+  db.close();
+});
+
+
+test('feedback arriving during AI ranking cannot reappear in the published cache', async () => {
+  const db = emptyDb();
+  db.prepare("INSERT INTO items (imdb_id,tmdb_id,type,title,status,rating) VALUES ('tt-seed',10,'movie','Favorite','completed',5)").run();
+  db.close();
+  onAiResponse = () => {
+    const connection = init();
+    feedback.dismissRecommendation(connection, 'default', 'tt-new', 'Changed my mind', 'not_interested');
+    connection.close();
+  };
+  try {
+    await recommend.run();
+    const connection = init();
+    assert.equal(connection.prepare("SELECT COUNT(*) AS n FROM recommendations_cache WHERE imdb_id='tt-new'").get().n, 0);
+    connection.close();
+  } finally { onAiResponse = () => {}; }
+});
+
+test('simultaneous refreshes cannot overwrite one another', async () => {
+  const db = emptyDb();
+  db.prepare("INSERT INTO recommendation_runs (user_id,token) VALUES ('default','existing-run')").run();
+  db.close();
+  await assert.rejects(recommend.run(), /already running/);
+  const connection = init();
+  assert.equal(connection.prepare('SELECT token FROM recommendation_runs').get().token, 'existing-run');
+  connection.close();
 });

@@ -337,13 +337,22 @@ async function run(userId = 'default') {
       FROM items i LEFT JOIN ratings r ON r.user_id = i.user_id AND r.imdb_id = i.imdb_id
       WHERE i.user_id = ?
     `).all(userId);
+    // Ratings on recommendation cards also teach taste after those cards leave the cache.
+    history.push(...db.prepare(`SELECT r.imdb_id, COALESCE(r.tmdb_id, c.tmdb_id) AS tmdb_id,
+      COALESCE(r.title, c.title) AS title, COALESCE(r.type, c.type) AS type,
+      COALESCE(r.is_anime, c.is_anime, 0) AS is_anime, 'rated' AS status,
+      r.rating * 5.0 / r.rating_scale AS rating, r.rated_at AS last_activity
+      FROM ratings r LEFT JOIN recommendations_cache c ON c.user_id = r.user_id AND c.imdb_id = r.imdb_id
+      WHERE r.user_id = ? AND NOT EXISTS (
+        SELECT 1 FROM items i WHERE i.user_id = r.user_id AND i.imdb_id = r.imdb_id)
+      AND COALESCE(r.title, c.title) IS NOT NULL`).all(userId));
     const feedback = db.prepare('SELECT * FROM hidden_items WHERE user_id = ? ORDER BY created_at DESC').all(userId);
     const excludedIds = new Set([
-      ...history.map(item => item.imdb_id), ...feedback.map(item => item.imdb_id),
+      ...history.filter(item => item.status !== 'rated').map(item => item.imdb_id), ...feedback.map(item => item.imdb_id),
       ...db.prepare('SELECT DISTINCT imdb_id FROM watched WHERE user_id = ?').all(userId).map(item => item.imdb_id),
       ...db.prepare('SELECT imdb_id FROM ratings WHERE user_id = ? AND rating * 5.0 / rating_scale <= 2').all(userId).map(item => item.imdb_id),
     ]);
-    const excludedKeys = new Set([...history, ...feedback].filter(item => item.tmdb_id && item.type)
+    const excludedKeys = new Set([...history.filter(item => item.status !== 'rated'), ...feedback].filter(item => item.tmdb_id && item.type)
       .map(item => `${item.type}:${item.tmdb_id}`));
     const channels = [
       { name: 'Movies', gather: gatherMovieCandidates, count: 100, type: 'movie', anime: 0 },
@@ -377,24 +386,24 @@ async function run(userId = 'default') {
         updated_at = datetime('now')
     `);
 
+    const excludedNow = db.prepare(`SELECT 1 FROM items WHERE user_id = ? AND imdb_id = ?
+      UNION SELECT 1 FROM hidden_items WHERE user_id = ? AND imdb_id = ?
+      UNION SELECT 1 FROM watched WHERE user_id = ? AND imdb_id = ?
+      UNION SELECT 1 FROM ratings WHERE user_id = ? AND imdb_id = ? AND rating * 5.0 / rating_scale <= 2`);
     let cached = 0;
     db.transaction(() => {
-      // Replace each successfully refreshed channel so old high-score rows cannot linger.
+      // Recheck feedback and the old-movie cap together before publishing each channel.
       for (const channel of completed) {
-        const keep = new Set(channel.ranked.map(candidate => candidate.imdbId));
+        const allowed = channel.ranked.filter(candidate => !excludedNow.get(
+          userId, candidate.imdbId, userId, candidate.imdbId, userId, candidate.imdbId, userId, candidate.imdbId));
+        const ranked = policy.limitOlderMovies(allowed, channel.count);
+        const keep = new Set(ranked.map(candidate => candidate.imdbId));
         const previous = db.prepare('SELECT imdb_id FROM recommendations_cache WHERE user_id = ? AND type = ? AND is_anime = ?')
           .all(userId, channel.type, channel.anime);
         for (const row of previous) {
           if (!keep.has(row.imdb_id)) db.prepare('DELETE FROM recommendations_cache WHERE user_id = ? AND imdb_id = ?').run(userId, row.imdb_id);
         }
-        for (const candidate of channel.ranked) {
-          // Recheck exclusions inside the write transaction in case feedback arrived during ranking.
-          const excluded = db.prepare(`SELECT 1 FROM items WHERE user_id = ? AND imdb_id = ?
-            UNION SELECT 1 FROM hidden_items WHERE user_id = ? AND imdb_id = ?
-            UNION SELECT 1 FROM watched WHERE user_id = ? AND imdb_id = ?
-            UNION SELECT 1 FROM ratings WHERE user_id = ? AND imdb_id = ? AND rating * 5.0 / rating_scale <= 2`).get(
-            userId, candidate.imdbId, userId, candidate.imdbId, userId, candidate.imdbId, userId, candidate.imdbId);
-          if (excluded) continue;
+        for (const candidate of ranked) {
           const genres = (candidate.details.genres || []).map(genre => genre.name).join(',');
           upsert.run(userId, candidate.imdbId, candidate.type, candidate.title, candidate.poster,
             channel.anime, candidate.score, candidate.reason || candidate.basedOn, genres,

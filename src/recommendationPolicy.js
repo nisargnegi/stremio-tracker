@@ -21,8 +21,8 @@ function tasteProfile(history, feedback, category) {
   return {
     seeds: positive.filter(item => item.tmdb_id).slice(0, category === 'Anime' ? 10 : 15),
     seedTitles: positive.slice(0, 25).map(item => item.title).filter(Boolean),
-    highlyRated: rows.filter(item => item.rating >= 4).map(item => item.title).filter(Boolean),
-    disliked: rows.filter(item => item.rating && item.rating <= 2).map(item => item.title).filter(Boolean),
+    highlyRated: rows.filter(item => item.rating >= 4).slice(0, 50).map(item => item.title).filter(Boolean),
+    disliked: rows.filter(item => item.rating && item.rating <= 2).slice(0, 30).map(item => item.title).filter(Boolean),
     feedback: feedback.filter(item => (!item.type || categoryOf(item) === category) &&
       item.reason !== 'already_watched').slice(0, 30)
       .map(item => ({ title: item.title, reason: item.reason, genres: item.genres || '' })),
