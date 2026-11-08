@@ -28,8 +28,8 @@ Built because Trakt's free tier limits connected applications and its Stremio sc
   - **⭐ 5-Star Interactive Ratings**: Rate items to feed DeepSeek positive (4-5★) and negative (1-2★) taste guidance.
   - **✕ Persistent Hide / Not Interested**: Dismissed items never reappear.
   - **📱 Mobile Responsive UI**: Touch-optimized 2-column mobile layout and responsive modals.
-- **⏱️ Weekly Automated Background Schedule**: Automated cron runs **weekly (every 7 days)** to update recommendations without wasting API credits, with manual refresh available anytime from the dashboard button.
-- **Automated CI/CD**: Built-in GitHub Actions workflow for zero-downtime SSH deployment to your VPS.
+- **⏱️ Automated Background Schedule**: Checks episodes daily and refreshes recommendations once per UTC week. Successful run dates persist across container restarts. Manual recommendation refresh is available from the dashboard.
+- **Automated CI/CD**: Built-in GitHub Actions workflow for SSH key deployment with backups and health checks.
 
 ---
 
@@ -48,7 +48,7 @@ This codebase is **100% safe for public GitHub repositories**. All sensitive dat
    - All traffic routes strictly through **Caddy** via Docker internal DNS.
    - Containers run with `read_only: true` filesystems and `no-new-privileges: true`.
 4. **CI/CD Security**:
-   - GitHub Actions workflow uses encrypted repository secrets (`VPS_HOST`, `VPS_USERNAME`, `VPS_PASSWORD`, `VPS_PORT`).
+   - GitHub Actions workflow uses encrypted repository secrets (`VPS_HOST`, `VPS_USERNAME`, `VPS_SSH_KEY`, `VPS_KNOWN_HOSTS`, `VPS_PORT`).
 
 ---
 
