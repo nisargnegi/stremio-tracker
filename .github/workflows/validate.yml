@@ -1,6 +1,8 @@
 name: Validate
 on:
   workflow_call:
+  push:
+    branches-ignore: [main]
   pull_request:
 permissions:
   contents: read
@@ -12,7 +14,8 @@ jobs:
       - name: Check deployment scripts and scheduler behavior
         run: |
           bash -n deploy/stremio-deploy
-          sh -n deploy/stremio-deploy-request scripts/run-scheduler.sh
+          sh -n deploy/stremio-deploy-request
+          sh -n scripts/run-scheduler.sh
           python3 -m unittest discover -s tests
       - name: Validate standalone and shared proxy Compose configurations
         run: |

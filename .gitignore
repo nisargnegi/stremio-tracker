@@ -34,3 +34,5 @@ coverage/
 
 # Local deployment backups
 docker-compose.override.yml.*
+
+__pycache__/

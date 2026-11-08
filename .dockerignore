@@ -15,3 +15,5 @@ logs
 *.tar*
 docker-compose.override.yml*
 tmp_recs.json
+
+__pycache__

@@ -1,6 +1,6 @@
 #!/bin/sh
 # Persist successful runs so container restarts do not repeat scheduled work.
-set -u
+set -eu
 state_dir="${SCHEDULER_STATE_DIR:-/app/data/scheduler}"
 mkdir -p "$state_dir"
 while true; do
