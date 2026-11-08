@@ -24,3 +24,5 @@ jobs:
           docker compose -f docker-compose.yml -f deploy/compose.shared-proxy.example.yml config -q
       - name: Build the application image
         run: docker build -t stremio-tracker:check .
+      - name: Test recommendation policies, migrations, and HTTP entry points
+        run: docker run --rm --network none --read-only --tmpfs /tmp stremio-tracker:check node --test tests/recommendations.test.js

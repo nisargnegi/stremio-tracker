@@ -117,6 +117,28 @@ function init() {
     db.prepare("ALTER TABLE recommendations_cache ADD COLUMN last_seen TEXT").run();
   } catch (_) {}
 
+  // Additive migrations preserve existing libraries and saved feedback.
+  db.transaction(() => {
+    const additions = {
+      ratings: { rating_scale: 'INTEGER' },
+      recommendations_cache: { tmdb_id: 'INTEGER', release_year: 'INTEGER', impression_days: 'INTEGER DEFAULT 0' },
+      hidden_items: { reason: "TEXT DEFAULT 'not_interested'", type: 'TEXT', is_anime: 'INTEGER', genres: 'TEXT', tmdb_id: 'INTEGER' },
+    };
+    for (const [table, fields] of Object.entries(additions)) {
+      const existing = new Set(db.pragma(`table_info(${table})`).map(column => column.name));
+      for (const [name, definition] of Object.entries(fields)) {
+        if (!existing.has(name)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`);
+      }
+    }
+    // Trakt exports use ten points and ISO timestamps. Dashboard ratings use five points.
+    db.exec(`UPDATE ratings SET rating_scale = CASE
+      WHEN rating > 5 OR instr(COALESCE(rated_at, ''), 'T') > 0 THEN 10 ELSE 5 END
+      WHERE rating_scale IS NULL`);
+    db.exec(`CREATE TABLE IF NOT EXISTS recommendation_runs (
+      user_id TEXT PRIMARY KEY, token TEXT NOT NULL, started_at TEXT DEFAULT (datetime('now'))
+    )`);
+  }).immediate();
+
   return db;
 }
 

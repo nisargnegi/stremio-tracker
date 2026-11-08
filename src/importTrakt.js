@@ -34,9 +34,9 @@ function run(exportDir, userId = 'default') {
     ON CONFLICT(user_id, imdb_id, season, episode) DO NOTHING
   `);
   const insertRating = db.prepare(`
-    INSERT INTO ratings (user_id, imdb_id, rating, rated_at)
-    VALUES (?, ?, ?, ?)
-    ON CONFLICT(user_id, imdb_id) DO UPDATE SET rating = excluded.rating
+    INSERT INTO ratings (user_id, imdb_id, rating, rated_at, rating_scale)
+    VALUES (?, ?, ?, ?, 10)
+    ON CONFLICT(user_id, imdb_id) DO UPDATE SET rating = excluded.rating, rated_at = excluded.rated_at, rating_scale = 10
   `);
 
   let showCount = 0;

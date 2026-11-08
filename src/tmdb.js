@@ -23,7 +23,7 @@ async function tmdbGet(endpoint, params = {}) {
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
 
   for (let attempt = 0; attempt < 4; attempt++) {
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(20000) });
     if (res.status === 429) {
       const wait = parseInt(res.headers.get('Retry-After') || '8', 10) * 1000;
       console.warn(`[tmdb] 429 rate-limit on ${endpoint}, waiting ${wait}ms…`);
@@ -100,16 +100,20 @@ async function getNowPlayingOrOnAir(type, page = 1) {
 }
 
 // Discover — filter by genre IDs, vote average, language, etc.
-async function discover(type, { genreIds = [], minVote = 6.5, language = null, page = 1 } = {}) {
+async function discover(type, { genreIds = [], minVote = 6.5, language = null, page = 1, fromDate = null, sortBy = 'vote_average.desc' } = {}) {
   const kind = type === 'movie' ? 'movie' : 'tv';
   const params = {
     page,
     'vote_average.gte': minVote,
     'vote_count.gte': 100,
-    sort_by: 'vote_average.desc',
+    sort_by: sortBy,
   };
   if (genreIds.length > 0) params.with_genres = genreIds.join(',');
   if (language) params.with_original_language = language;
+  if (kind === 'movie' && fromDate) {
+    params['primary_release_date.gte'] = fromDate;
+    params['primary_release_date.lte'] = new Date().toISOString().slice(0, 10);
+  }
   const data = await tmdbGet(`/discover/${kind}`, params);
   return data.results || [];
 }

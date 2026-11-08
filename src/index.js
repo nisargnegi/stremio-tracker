@@ -18,6 +18,7 @@ const { addonBuilder, getRouter } = require('stremio-addon-sdk');
 const { init } = require('./db');
 const { logStreamRequest } = require('./watchTracker');
 const recommend = require('./recommend');
+const { DISMISSAL_REASONS, IMPRESSION_PENALTY, recordImpressions, dismissRecommendation } = require('./recommendationFeedback');
 const tmdb = require('./tmdb');
 
 const db = init();
@@ -81,7 +82,7 @@ builder.defineCatalogHandler(({ type, id }) => {
     const rows = db.prepare(`
       SELECT imdb_id, title, poster FROM recommendations_cache
       WHERE type = ? AND (is_anime = 0 OR type = 'movie')
-      ORDER BY score DESC
+      ORDER BY (score - (${IMPRESSION_PENALTY})) DESC
       LIMIT 100
     `).all(type);
 
@@ -94,7 +95,7 @@ builder.defineCatalogHandler(({ type, id }) => {
     const rows = db.prepare(`
       SELECT imdb_id, title, poster FROM recommendations_cache
       WHERE type = 'series' AND is_anime = 1
-      ORDER BY score DESC
+      ORDER BY (score - (${IMPRESSION_PENALTY})) DESC
       LIMIT 100
     `).all();
 
@@ -165,8 +166,8 @@ app.use(`/${SECRET}`, (req, res, next) => {
   if (url === '/api/recommendations' && req.method === 'GET') {
     try {
       const rows = db.prepare(`
-        SELECT imdb_id, type, title, poster, is_anime, score, reason, genres, COALESCE(impressions, 0) as impressions, updated_at,
-               (score - (COALESCE(impressions, 0) * 2.5)) AS final_score
+        SELECT imdb_id, type, title, poster, is_anime, score, reason, genres, COALESCE(impression_days, 0) as impressions, updated_at,
+               (score - (${IMPRESSION_PENALTY})) AS final_score
         FROM recommendations_cache
         WHERE user_id = 'default'
         ORDER BY final_score DESC
@@ -247,16 +248,8 @@ app.use(`/${SECRET}`, (req, res, next) => {
     const { imdbIds } = req.body || {};
     if (Array.isArray(imdbIds) && imdbIds.length > 0) {
       try {
-        const stmt = db.prepare(`
-          UPDATE recommendations_cache
-          SET impressions = COALESCE(impressions, 0) + 1, last_seen = datetime('now')
-          WHERE imdb_id = ? AND user_id = 'default'
-        `);
-        const transaction = db.transaction((ids) => {
-          for (const id of ids) stmt.run(id);
-        });
-        transaction(imdbIds.slice(0, 30));
-        return res.json({ ok: true, count: imdbIds.length });
+        const count = recordImpressions(db, 'default', imdbIds.filter(id => typeof id === 'string'));
+        return res.json({ ok: true, count });
       } catch (err) {
         return res.status(500).json({ error: err.message });
       }
@@ -268,7 +261,7 @@ app.use(`/${SECRET}`, (req, res, next) => {
   if (url === '/api/towatch' && req.method === 'GET') {
     try {
       const rows = db.prepare(`
-        SELECT i.imdb_id, i.type, i.title, i.poster, i.year, i.status, i.is_anime, COALESCE(r.rating, i.rating) as rating
+        SELECT i.imdb_id, i.type, i.title, i.poster, i.year, i.status, i.is_anime, COALESCE(r.rating * 5.0 / r.rating_scale, i.rating) as rating
         FROM items i
         LEFT JOIN ratings r ON r.imdb_id = i.imdb_id AND r.user_id = i.user_id
         WHERE i.user_id = 'default' AND i.status = 'to_watch'
@@ -306,7 +299,7 @@ app.use(`/${SECRET}`, (req, res, next) => {
   if (url === '/api/history' && req.method === 'GET') {
     try {
       const rows = db.prepare(`
-        SELECT i.imdb_id, i.type, i.title, i.poster, i.year, i.status, i.is_anime, COALESCE(r.rating, i.rating) as rating
+        SELECT i.imdb_id, i.type, i.title, i.poster, i.year, i.status, i.is_anime, COALESCE(r.rating * 5.0 / r.rating_scale, i.rating) as rating
         FROM items i
         LEFT JOIN ratings r ON r.imdb_id = i.imdb_id AND r.user_id = i.user_id
         WHERE i.user_id = 'default' AND (i.status IS NULL OR i.status != 'to_watch')
@@ -320,15 +313,11 @@ app.use(`/${SECRET}`, (req, res, next) => {
 
   // API: hide / not interested item permanently
   if (url === '/api/hide' && req.method === 'POST') {
-    const { imdbId, title } = req.body || {};
-    if (!imdbId) return res.status(400).json({ error: 'imdbId required' });
+    const { imdbId, title, reason = 'not_interested' } = req.body || {};
+    if (typeof imdbId !== 'string' || !imdbId) return res.status(400).json({ error: 'imdbId required' });
+    if (!DISMISSAL_REASONS.has(reason)) return res.status(400).json({ error: 'Invalid dismissal reason' });
     try {
-      db.prepare(`
-        INSERT INTO hidden_items (user_id, imdb_id, title)
-        VALUES ('default', ?, ?)
-        ON CONFLICT(user_id, imdb_id) DO UPDATE SET title = excluded.title
-      `).run(imdbId, title || '');
-      db.prepare(`DELETE FROM recommendations_cache WHERE imdb_id = ? AND user_id = 'default'`).run(imdbId);
+      dismissRecommendation(db, 'default', imdbId, title, reason);
       return res.json({ ok: true, message: `${imdbId} hidden persistently` });
     } catch (err) {
       return res.status(500).json({ error: err.message });
@@ -342,12 +331,12 @@ app.use(`/${SECRET}`, (req, res, next) => {
     const score = Math.max(1, Math.min(5, Math.round(rating)));
     try {
       db.prepare(`
-        INSERT INTO ratings (user_id, imdb_id, rating, rated_at)
-        VALUES ('default', ?, ?, datetime('now'))
-        ON CONFLICT(user_id, imdb_id) DO UPDATE SET rating = excluded.rating, rated_at = datetime('now')
+        INSERT INTO ratings (user_id, imdb_id, rating, rated_at, rating_scale)
+        VALUES ('default', ?, ?, datetime('now'), 5)
+        ON CONFLICT(user_id, imdb_id) DO UPDATE SET rating = excluded.rating, rated_at = datetime('now'), rating_scale = 5
       `).run(imdbId, score);
       db.prepare(`UPDATE items SET rating = ? WHERE imdb_id = ? AND user_id = 'default'`).run(score, imdbId);
-      db.prepare(`UPDATE recommendations_cache SET impressions = 0 WHERE imdb_id = ? AND user_id = 'default'`).run(imdbId);
+      db.prepare(`UPDATE recommendations_cache SET impressions = 0, impression_days = 0, last_seen = NULL WHERE imdb_id = ? AND user_id = 'default'`).run(imdbId);
       return res.json({ ok: true, imdbId, rating: score });
     } catch (err) {
       return res.status(500).json({ error: err.message });
@@ -367,7 +356,7 @@ app.use(`/${SECRET}`, (req, res, next) => {
     (async () => {
       try {
         const userRatingRow = db.prepare(`
-          SELECT COALESCE(r.rating, i.rating) as rating
+          SELECT COALESCE(r.rating * 5.0 / r.rating_scale, i.rating) as rating
           FROM items i
           LEFT JOIN ratings r ON r.imdb_id = i.imdb_id AND r.user_id = i.user_id
           WHERE i.user_id = 'default' AND (i.imdb_id = ? OR i.imdb_id = ?)
@@ -526,9 +515,9 @@ app.post(`/${SECRET}/mark-watched`, (req, res) => {
     `).run(imdbId, type, score);
     if (score) {
       db.prepare(`
-        INSERT INTO ratings (user_id, imdb_id, rating, rated_at)
-        VALUES ('default', ?, ?, datetime('now'))
-        ON CONFLICT(user_id, imdb_id) DO UPDATE SET rating = excluded.rating, rated_at = datetime('now')
+        INSERT INTO ratings (user_id, imdb_id, rating, rated_at, rating_scale)
+        VALUES ('default', ?, ?, datetime('now'), 5)
+        ON CONFLICT(user_id, imdb_id) DO UPDATE SET rating = excluded.rating, rated_at = datetime('now'), rating_scale = 5
       `).run(imdbId, score);
     }
     db.prepare(`

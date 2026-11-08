@@ -651,6 +651,11 @@
         font-size: 12px;
       }
     }
+    .feedback-dialog { background: var(--bg-card, #171a24); color: var(--text-main, #fff); border: 1px solid #454957; border-radius: 16px; padding: 24px; max-width: 420px; width: 90vw; margin: auto; }
+    .feedback-dialog::backdrop { background: rgba(0, 0, 0, .7); }
+    .feedback-dialog h3 { margin: 0 0 8px; }
+    .feedback-dialog p { margin: 0 0 18px; }
+    .feedback-options { display: flex; flex-direction: column; gap: 10px; }
   </style>
 </head>
 <body>
@@ -726,6 +731,16 @@
     </div>
   </div>
 
+  <dialog id="feedback-dialog" class="feedback-dialog" aria-labelledby="feedback-heading">
+    <h3 id="feedback-heading">Hide recommendation</h3>
+    <p id="feedback-title"></p>
+    <div class="feedback-options">
+      <button class="action-btn" onclick="submitDismissal('already_watched')">Already watched</button>
+      <button class="action-btn" onclick="submitDismissal('wrong_genre')">Wrong genre for me</button>
+      <button class="action-btn" onclick="submitDismissal('not_interested')">Not interested in this title</button>
+      <button class="action-btn" onclick="document.getElementById('feedback-dialog').close()">Cancel</button>
+    </div>
+  </dialog>
   <div class="toast" id="toast"></div>
 
   <script>
@@ -938,7 +953,7 @@
           : `<div class="poster-fallback">🎬</div>`;
 
         const hideOverlayHtml = currentTab === 'recs'
-          ? `<button class="hide-btn-overlay" title="Not Interested / Hide" onclick="hideItem('${esc(item.imdb_id)}', '${esc(item.title)}', event)">✕</button>`
+          ? `<button class="hide-btn-overlay" title="Not Interested / Hide" onclick="hideItem('${esc(item.imdb_id)}', event)">✕</button>`
           : '';
 
         let actionsHtml = '';
@@ -946,7 +961,7 @@
           actionsHtml = `
             <button class="action-btn action-btn-watched" onclick="markWatched('${esc(item.imdb_id)}', '${esc(item.type)}')">✓ Watched</button>
             <button class="action-btn action-btn-towatch" onclick="saveToWatchFromObj('${esc(item.imdb_id)}', '${esc(item.type)}')">📌 To Watch</button>
-            <button class="action-btn action-btn-dismiss" onclick="hideItem('${esc(item.imdb_id)}', '${esc(item.title)}', event)">✕ Hide</button>`;
+            <button class="action-btn action-btn-dismiss" onclick="hideItem('${esc(item.imdb_id)}', event)">✕ Hide</button>`;
         } else if (currentTab === 'towatch') {
           actionsHtml = `
             <button class="action-btn action-btn-watched" onclick="markWatched('${esc(item.imdb_id)}', '${esc(item.type)}')">✓ Watched</button>
@@ -956,7 +971,7 @@
         }
 
         const seenTagHtml = (currentTab === 'recs' && item.impressions >= 3)
-          ? `<div class="seen-tag">👁 Shown ${item.impressions} times</div>`
+          ? `<div class="seen-tag">👁 Seen on ${item.impressions} days</div>`
           : '';
 
         const reasonHtml = currentTab === 'recs'
@@ -1030,19 +1045,40 @@
       loadData();
     }
 
-    async function hideItem(imdbId, title, event) {
+    let pendingDismissal = null;
+    let dismissalSaving = false;
+
+    function hideItem(imdbId, event) {
       if (event) event.stopPropagation();
-      document.getElementById(`card-${imdbId}`)?.remove();
-      allRecs = allRecs.filter(i => i.imdb_id !== imdbId);
-      showToast('Item hidden persistently');
-      await fetch(`${API_BASE}/hide`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imdbId, title }),
-      });
-      updatePillCounts();
-      renderGenrePills();
-      renderGrid();
+      const item = allRecs.find(rec => rec.imdb_id === imdbId);
+      if (!item) return;
+      pendingDismissal = { imdbId, title: item.title };
+      document.getElementById('feedback-title').textContent = item.title || imdbId;
+      document.getElementById('feedback-dialog').showModal();
+    }
+
+    async function submitDismissal(reason) {
+      if (!pendingDismissal || dismissalSaving) return;
+      dismissalSaving = true;
+      const { imdbId, title } = pendingDismissal;
+      try {
+        const response = await fetch(`${API_BASE}/hide`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imdbId, title, reason }),
+        });
+        if (!response.ok) throw new Error('Could not save feedback');
+        document.getElementById('feedback-dialog').close();
+        allRecs = allRecs.filter(item => item.imdb_id !== imdbId);
+        pendingDismissal = null;
+        showToast('Hidden. Feedback saved for your next refresh.');
+        updatePillCounts();
+        renderGenrePills();
+        renderGrid();
+      } catch (error) {
+        showToast(error.message);
+      } finally {
+        dismissalSaving = false;
+      }
     }
 
     async function removeHistory(imdbId) {

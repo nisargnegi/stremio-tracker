@@ -18,7 +18,7 @@ Built because Trakt's free tier limits connected applications and its Stremio sc
   - 3 dedicated recommendation channels: **Movies (100)**, **TV Series (100)**, and **Anime (60)** for up to 260 total recommendations per run.
   - Candidate pools generated from your viewing history via TMDB, re-ranked with personalized one-line explanations using **DeepSeek** (primary) or **Gemini** (fallback).
 - **📉 Smart Impression Score-Decay**:
-  - Recommendations you repeatedly view on the dashboard without clicking gradually sink down the list (`final_score = ai_score - impressions * 2.5`).
+  - Recommendations seen on different UTC days gradually move down the list. Repeat page visits on the same day count once, with a maximum penalty of eight points.
   - Fresh AI discoveries naturally rise to the top.
 - **🌐 Interactive Web Dashboard**:
   - **Type Filter Pills**: 🎬 Movies, 📺 Series, 🌸 Anime.
@@ -26,9 +26,9 @@ Built because Trakt's free tier limits connected applications and its Stremio sc
   - **📌 "To Watch" (Plan to Watch) Tab**: Move recommendations into a dedicated watchlist tab.
   - **➕ Real-Time TMDB Search**: Search and add any movie, series, or anime directly to your watchlist from the dashboard.
   - **⭐ 5-Star Interactive Ratings**: Rate items to feed DeepSeek positive (4-5★) and negative (1-2★) taste guidance.
-  - **✕ Persistent Hide / Not Interested**: Dismissed items never reappear.
+  - **✕ Persistent Hide / Feedback**: Dismissed items never reappear.
   - **📱 Mobile Responsive UI**: Touch-optimized 2-column mobile layout and responsive modals.
-- **⏱️ Automated Background Schedule**: Checks episodes daily and refreshes recommendations once per UTC week. Successful run dates persist across container restarts. Manual recommendation refresh is available from the dashboard.
+- **⏱️ Automated Background Schedule**: Checks episodes daily and refreshes recommendations once per UTC week. Movie recommendations favor releases from the last five years, with up to 20% older, highly rated taste matches. The minimum vote count and popularity safeguards remain in place. Successful run dates persist across container restarts. Manual recommendation refresh is available from the dashboard.
 - **Automated CI/CD**: Built-in GitHub Actions workflow for SSH key deployment with backups and health checks.
 
 ---
@@ -180,3 +180,11 @@ Follow the [deployment setup](deploy/README.md) to install the VPS helpers, conf
 ## 📄 License
 
 [MIT License](LICENSE) - Open source and free for personal use.
+
+### Recommendation preferences
+
+Movie and TV/anime taste profiles use highly rated and recently watched titles. Imported Trakt ratings are interpreted on their original ten-point scale, while dashboard ratings use five stars. Watched, tracked, disliked, and hidden titles are removed before AI ranking. Model results are matched by typed TMDB IDs so remakes with the same title stay distinct.
+
+Recent movies must still have at least 80 votes and popularity 10. Older movies also need an average rating of at least 7.5, at least 500 votes, and a connection to a highly rated or completed title. They occupy at most 20% of the returned movie list. A series' original premiere date does not limit its eligibility.
+
+Choose **Hide** to distinguish **Already watched**, **Wrong genre for me**, and **Not interested in this title**. The latter two feed the next AI refresh. Legacy hidden titles remain excluded. Successfully refreshed channels replace stale cached rows, while channels with unavailable upstream metadata keep their previous results. When AI ranking is unavailable, the same popularity and freshness rules apply to the deterministic fallback.
