@@ -28,6 +28,9 @@ cron=$("${compose[@]}" ps -q cron)
 [[ -n $addon && -n $cron ]] || { echo 'Expected existing addon and cron containers'; exit 1; }
 old_addon=$(docker inspect --format '{{.Image}}' "$addon")
 old_cron=$(docker inspect --format '{{.Image}}' "$cron")
+rollback_tag=$(basename "$release_dir")
+docker tag "$old_addon" "stremio-tracker-rollback-addon:$rollback_tag"
+docker tag "$old_cron" "stremio-tracker-rollback-cron:$rollback_tag"
 # SQLite's online backup API includes committed WAL data.
 docker exec "$addon" node -e 'const Database=require("better-sqlite3"); const db=new Database(process.env.DB_PATH||"./data/tracker.db"); db.backup("/tmp/stremio-deploy-backup.sqlite").then(()=>db.close()).catch(()=>process.exit(1))'
 docker cp "$addon:/tmp/stremio-deploy-backup.sqlite" "$backup_dir/tracker.sqlite3"
@@ -37,7 +40,7 @@ if [[ -f docker-compose.override.yml ]]; then
   cp -p docker-compose.override.yml "$backup_dir/docker-compose.override.yml"
 fi
 printf '%s\n' "$previous" > "$backup_dir/previous-commit"
-printf 'services:\n  addon:\n    image: %s\n  cron:\n    image: %s\n' "$old_addon" "$old_cron" > "$release_dir/rollback.yml"
+printf 'services:\n  addon:\n    image: %s\n  cron:\n    image: %s\n' "stremio-tracker-rollback-addon:$rollback_tag" "stremio-tracker-rollback-cron:$rollback_tag" > "$release_dir/rollback.yml"
 rollback() {
   trap - ERR
   echo 'Deployment failed. Restoring the previous code and images.' >&2
