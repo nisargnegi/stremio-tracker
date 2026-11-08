@@ -414,7 +414,8 @@ async function run(userId = 'default') {
       db.prepare(`DELETE FROM recommendations_cache WHERE user_id = ? AND imdb_id IN (
         SELECT imdb_id FROM hidden_items WHERE user_id = ? UNION SELECT imdb_id FROM items WHERE user_id = ?
         UNION SELECT imdb_id FROM ratings WHERE user_id = ? AND rating * 5.0 / rating_scale <= 2
-      )`).run(userId, userId, userId, userId);
+        UNION SELECT imdb_id FROM watched WHERE user_id = ?
+      )`).run(userId, userId, userId, userId, userId);
     })();
     console.log(`[recommend] Done. ${cached} recommendations cached.`);
 

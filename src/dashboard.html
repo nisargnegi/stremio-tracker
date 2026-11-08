@@ -738,7 +738,7 @@
       <button class="action-btn" onclick="submitDismissal('already_watched')">Already watched</button>
       <button class="action-btn" onclick="submitDismissal('wrong_genre')">Wrong genre for me</button>
       <button class="action-btn" onclick="submitDismissal('not_interested')">Not interested in this title</button>
-      <button class="action-btn" onclick="document.getElementById('feedback-dialog').close()">Cancel</button>
+      <button class="action-btn" onclick="closeDismissal()">Cancel</button>
     </div>
   </dialog>
   <div class="toast" id="toast"></div>
@@ -1056,6 +1056,13 @@
       document.getElementById('feedback-title').textContent = item.title || imdbId;
       document.getElementById('feedback-dialog').showModal();
     }
+
+    function closeDismissal() {
+      if (!dismissalSaving) document.getElementById('feedback-dialog').close();
+    }
+    document.getElementById('feedback-dialog').addEventListener('cancel', event => {
+      if (dismissalSaving) event.preventDefault();
+    });
 
     async function submitDismissal(reason) {
       if (!pendingDismissal || dismissalSaving) return;

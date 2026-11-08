@@ -16,7 +16,7 @@ Built because Trakt's free tier limits connected applications and its Stremio sc
   - Automatically **re-activates shows back to `watching` on release day** when a brand-new episode drops!
 - **🤖 Per-Category AI Recommendation Engine**:
   - 3 dedicated recommendation channels: **Movies (100)**, **TV Series (100)**, and **Anime (60)** for up to 260 total recommendations per run.
-  - Candidate pools generated from your viewing history via TMDB, re-ranked with personalized one-line explanations using **DeepSeek** (primary) or **Gemini** (fallback).
+  - Candidate pools generated from your viewing history via TMDB, re-ranked with personalized one-line explanations using **DeepSeek**, with a deterministic fallback when AI is unavailable.
 - **📉 Smart Impression Score-Decay**:
   - Recommendations seen on different UTC days gradually move down the list. Repeat page visits on the same day count once, with a maximum penalty of eight points.
   - Fresh AI discoveries naturally rise to the top.
