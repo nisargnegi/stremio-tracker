@@ -130,6 +130,7 @@ test('full refresh excludes watched and hidden titles before AI and replaces sta
   db.prepare("INSERT INTO items (imdb_id, tmdb_id, type, title, status, rating) VALUES ('tt-seed',10,'movie','Favorite','completed',5)").run();
   db.prepare("INSERT INTO hidden_items (imdb_id,title,reason) VALUES ('tt-hidden','Hidden','not_interested')").run();
   db.prepare("INSERT INTO recommendations_cache (imdb_id,type,title,score) VALUES ('tt-stale','movie','Stale',999)").run();
+  db.prepare("INSERT INTO recommendations_cache (imdb_id,type,title,is_anime,score) VALUES ('tt-legacy-anime-film','movie','Legacy animated film',1,999)").run();
   db.close();
   const year = new Date().getUTCFullYear();
   const raw = [10, 20, 30].map(id => ({ id, title: 'Same title', release_date: `${year - 1}-01-01`,

@@ -398,7 +398,7 @@ async function run(userId = 'default') {
           userId, candidate.imdbId, userId, candidate.imdbId, userId, candidate.imdbId, userId, candidate.imdbId));
         const ranked = policy.limitOlderMovies(allowed, channel.count);
         const keep = new Set(ranked.map(candidate => candidate.imdbId));
-        const previous = db.prepare('SELECT imdb_id FROM recommendations_cache WHERE user_id = ? AND type = ? AND is_anime = ?')
+        const previous = db.prepare(`SELECT imdb_id FROM recommendations_cache WHERE user_id = ? AND type = ? AND (type = 'movie' OR is_anime = ?)`)
           .all(userId, channel.type, channel.anime);
         for (const row of previous) {
           if (!keep.has(row.imdb_id)) db.prepare('DELETE FROM recommendations_cache WHERE user_id = ? AND imdb_id = ?').run(userId, row.imdb_id);
