@@ -1,5 +1,12 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "5m"
+    max-file: "3"
+
 services:
   addon:
+    logging: *default-logging
     build: .
     restart: unless-stopped
     # Deliberately NOT exposed to the host/internet — only reachable by
@@ -26,20 +33,21 @@ services:
       retries: 3
 
   cron:
+    logging: *default-logging
     build: .
     restart: unless-stopped
     env_file: .env
     volumes:
       - ./data:/app/data
-    entrypoint: >
-      sh -c "while true; do node src/cron.js; node src/recommend.js; sleep 604800; done"
+    entrypoint: ["sh", "scripts/run-scheduler.sh"]
     healthcheck:
       disable: true
-    # runs weekly (every 7 days): checks new episodes, sweeps stale watches, refreshes recs
+    # Checks episodes daily and refreshes recommendations once per UTC ISO week.
     security_opt:
       - no-new-privileges:true
 
   caddy:
+    logging: *default-logging
     image: caddy:2-alpine
     restart: unless-stopped
     ports:
@@ -58,6 +66,7 @@ services:
   # Needed even on a VPS with a "static" IP, since it can occasionally
   # change on reboot depending on your provider.
   duckdns:
+    logging: *default-logging
     image: linuxserver/duckdns:latest
     restart: unless-stopped
     environment:

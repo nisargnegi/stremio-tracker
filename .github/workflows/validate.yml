@@ -1,0 +1,23 @@
+name: Validate
+on:
+  workflow_call:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check deployment scripts and scheduler behavior
+        run: |
+          bash -n deploy/stremio-deploy
+          sh -n deploy/stremio-deploy-request scripts/run-scheduler.sh
+          python3 -m unittest discover -s tests
+      - name: Validate standalone and shared proxy Compose configurations
+        run: |
+          cp .env.example .env
+          docker compose config -q
+          docker compose -f docker-compose.yml -f deploy/compose.shared-proxy.example.yml config -q
+      - name: Build the application image
+        run: docker build -t stremio-tracker:check .

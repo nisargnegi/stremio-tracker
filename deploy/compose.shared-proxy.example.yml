@@ -1,0 +1,10 @@
+# Copy to docker-compose.override.yml when using a separate reverse proxy.
+# Attach that proxy to <compose-project>_default and route to addon:7000.
+services:
+  addon:
+    ports:
+      - "127.0.0.1:7000:7000"
+  caddy:
+    profiles: [bundled-proxy]
+  duckdns:
+    profiles: [bundled-proxy]

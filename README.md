@@ -165,26 +165,15 @@ docker compose up -d --build
 
 Caddy will automatically provision a free Let's Encrypt SSL/TLS certificate.
 
-> 💡 **Multi-App VPS Tip**: If you are running multiple web applications on a single VPS behind a global reverse proxy, create `docker-compose.override.yml` on your server disk to expose port `"7000:7000"` and disable the bundled Caddy container. `docker-compose.override.yml` is ignored by Git, so your custom server routing will never be overwritten by updates!
+For a shared reverse proxy, use the checked-in [Compose override example](deploy/compose.shared-proxy.example.yml). It binds the optional host port to loopback and lets your existing proxy reach the addon over its Docker network.
 
 ---
 
 ## 🤖 Automated CI/CD (GitHub Actions)
 
-This repository includes an automated deployment workflow `.github/workflows/deploy.yml` that automatically deploys changes to your VPS whenever you push to `main` or `master`.
+Pushes to `main` validate the application and can deploy the exact commit using a dedicated SSH key. Deployment includes an online SQLite backup, an application image build, health checks, and code/image rollback on failure.
 
-### Setting Up GitHub Secrets:
-
-Navigate to your GitHub Repository → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**:
-
-| Secret Name | Value Description | Default Fallback |
-| :--- | :--- | :--- |
-| `VPS_HOST` | Public IP address or domain of your VPS | *(Required)* |
-| `VPS_USERNAME` | SSH user on your VPS | `root` |
-| `VPS_PASSWORD` | SSH password for your VPS user | *(Required)* |
-| `VPS_PORT` | SSH port on your VPS | `22` |
-
-Whenever you push commits to GitHub, the workflow will log in to your VPS via SSH, pull the latest code, and rebuild the containers with zero downtime.
+Follow the [deployment setup](deploy/README.md) to install the VPS helpers, configure GitHub secrets, and enable deployment for your repository. The same guide covers migrating an existing VPS override to daily episode checks and weekly recommendations.
 
 ---
 

@@ -1,0 +1,69 @@
+#!/bin/bash
+# Installed by an administrator, outside the Git checkout.
+set -Eeuo pipefail
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+source /etc/stremio-deploy.conf
+sha=${1:-}
+[[ $sha =~ ^[0-9a-f]{40}$ ]] || exit 1
+exec 9>/run/lock/stremio-deploy.lock
+flock -n 9 || { echo 'Another deployment is running' >&2; exit 1; }
+cd "$REPO_DIR"
+[[ -z $(git status --porcelain --untracked-files=no) ]] || {
+  echo 'Commit or reconcile tracked server edits before deploying' >&2; exit 1;
+}
+git fetch "$REPO_URL" "$DEPLOY_BRANCH"
+[[ $(git rev-parse FETCH_HEAD) == "$sha" ]] || {
+  echo 'Requested commit is no longer the deployment branch head' >&2; exit 1;
+}
+previous=$(git rev-parse HEAD)
+release_dir=$(mktemp -d /var/lib/stremio-deploy/release.XXXXXX)
+backup_dir=$(mktemp -d /var/backups/stremio-tracker/deploy.XXXXXX)
+chmod 700 "$release_dir" "$backup_dir"
+compose=(docker compose -p "$COMPOSE_PROJECT" -f docker-compose.yml)
+if [[ -f docker-compose.override.yml ]]; then
+  compose+=(-f docker-compose.override.yml)
+fi
+addon=$("${compose[@]}" ps -q addon)
+cron=$("${compose[@]}" ps -q cron)
+[[ -n $addon && -n $cron ]] || { echo 'Expected existing addon and cron containers'; exit 1; }
+old_addon=$(docker inspect --format '{{.Image}}' "$addon")
+old_cron=$(docker inspect --format '{{.Image}}' "$cron")
+# SQLite's online backup API includes committed WAL data.
+docker exec "$addon" node -e 'const Database=require("better-sqlite3"); const db=new Database(process.env.DB_PATH||"./data/tracker.db"); db.backup("/tmp/stremio-deploy-backup.sqlite").then(()=>db.close()).catch(()=>process.exit(1))'
+docker cp "$addon:/tmp/stremio-deploy-backup.sqlite" "$backup_dir/tracker.sqlite3"
+docker exec "$addon" rm /tmp/stremio-deploy-backup.sqlite
+cp -p .env "$backup_dir/.env"
+if [[ -f docker-compose.override.yml ]]; then
+  cp -p docker-compose.override.yml "$backup_dir/docker-compose.override.yml"
+fi
+printf '%s\n' "$previous" > "$backup_dir/previous-commit"
+printf 'services:\n  addon:\n    image: %s\n  cron:\n    image: %s\n' "$old_addon" "$old_cron" > "$release_dir/rollback.yml"
+rollback() {
+  trap - ERR
+  echo 'Deployment failed. Restoring the previous code and images.' >&2
+  git checkout --detach "$previous"
+  "${compose[@]}" -f "$release_dir/rollback.yml" up -d --no-deps --no-build addon cron || true
+  echo "Database backup retained at $backup_dir/tracker.sqlite3" >&2
+  exit 1
+}
+trap rollback ERR
+git checkout --detach "$sha"
+"${compose[@]}" config -q
+docker build -t "stremio-tracker-release:$sha" .
+printf 'services:\n  addon:\n    image: stremio-tracker-release:%s\n  cron:\n    image: stremio-tracker-release:%s\n' "$sha" "$sha" > "$release_dir/images.yml"
+"${compose[@]}" -f "$release_dir/images.yml" up -d --no-deps --no-build addon cron
+healthy=false
+for attempt in {1..60}; do
+  addon=$("${compose[@]}" ps -q addon)
+  if [[ -n $addon && $(docker inspect --format '{{.State.Health.Status}}' "$addon") == healthy ]]; then
+    healthy=true
+    break
+  fi
+  sleep 2
+done
+[[ $healthy == true ]]
+cron=$("${compose[@]}" ps -q cron)
+[[ $(docker inspect --format '{{.State.Running}}' "$cron") == true ]]
+trap - ERR
+printf '%s\n' "$sha" > /var/lib/stremio-deploy/current-commit
+echo "Deployed $sha successfully. Backup at $backup_dir"
