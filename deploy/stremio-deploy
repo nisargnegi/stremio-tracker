@@ -32,9 +32,25 @@ rollback_tag=$(basename "$release_dir")
 docker tag "$old_addon" "stremio-tracker-rollback-addon:$rollback_tag"
 docker tag "$old_cron" "stremio-tracker-rollback-cron:$rollback_tag"
 # SQLite's online backup API includes committed WAL data.
-docker exec "$addon" node -e 'const Database=require("better-sqlite3"); const db=new Database(process.env.DB_PATH||"./data/tracker.db"); db.backup("/tmp/stremio-deploy-backup.sqlite").then(()=>db.close()).catch(()=>process.exit(1))'
-docker cp "$addon:/tmp/stremio-deploy-backup.sqlite" "$backup_dir/tracker.sqlite3"
-docker exec "$addon" rm /tmp/stremio-deploy-backup.sqlite
+# Stream the backup through exec because Docker cp can miss files on tmpfs mounts.
+docker exec -i "$addon" node > "$backup_dir/tracker.sqlite3" <<'NODE'
+const Database = require('better-sqlite3');
+const fs = require('fs');
+const db = new Database(process.env.DB_PATH || './data/tracker.db');
+const backupPath = '/tmp/stremio-deploy-backup.sqlite';
+db.backup(backupPath).then(() => {
+  db.close();
+  process.stdout.write(fs.readFileSync(backupPath));
+  fs.unlinkSync(backupPath);
+}).catch(() => process.exit(1));
+NODE
+python3 - "$backup_dir/tracker.sqlite3" <<'PYTHON'
+import sqlite3
+import sys
+with sqlite3.connect(sys.argv[1]) as db:
+    if db.execute('PRAGMA integrity_check').fetchone()[0] != 'ok':
+        raise SystemExit('Backup integrity check failed')
+PYTHON
 cp -p .env "$backup_dir/.env"
 if [[ -f docker-compose.override.yml ]]; then
   cp -p docker-compose.override.yml "$backup_dir/docker-compose.override.yml"
